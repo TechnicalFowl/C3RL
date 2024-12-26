@@ -1,6 +1,7 @@
 module roguelike;
 
 import std::collections::list;
+import std::io;
 import std::math;
 import raylib5::rl;
 
@@ -174,6 +175,8 @@ struct Map
     
     Player* player;
     List(<Actor>) actors;
+
+    ulong elapsed_time;
 }
 
 fn void Map.new_init(&self, int w, int h)
@@ -197,6 +200,7 @@ struct ActorAction @private
 
 fn void Map.update(&self)
 {
+    assert(self.player != null, "Player is null in Map.update()");
     if (self.player.hasInput())
     {
         Action action = self.player.update(self, 1000000);
@@ -219,6 +223,8 @@ fn void Map.update(&self)
             act.actor.apply(self, act.action);
         }
         self.player.apply(self, action);
+
+        self.elapsed_time += time;
     }
 }
 
@@ -250,6 +256,15 @@ fn void Map.render(&self, TextBuffer* buffer)
         if (screen_pos[0] >= 0 && screen_pos[0] < buffer.width && screen_pos[1] >= 0 && screen_pos[1] < buffer.height)
         {
             Appearance app = actor.getAppearance();
+            buffer.set(screen_pos, app.icon, app.color, rl::BLANK);
+        }
+    }
+    {
+        int[<2>] pos = self.player.position();
+        int[<2>] screen_pos = { pos[0] - min_pos[0], pos[1] - min_pos[1] };
+        if (screen_pos[0] >= 0 && screen_pos[0] < buffer.width && screen_pos[1] >= 0 && screen_pos[1] < buffer.height)
+        {
+            Appearance app =  self.player.getAppearance();
             buffer.set(screen_pos, app.icon, app.color, rl::BLANK);
         }
     }
@@ -323,6 +338,9 @@ fn void init(RLSettings settings)
 
     g_internal.font_tex = rl::loadTexture(settings.font.zstr_tcopy());
     g_internal.hfont_tex = rl::loadTexture(settings.hfont.zstr_tcopy());
+
+    g_internal.current_state = settings.initial_state;
+    g_internal.current_map = settings.initial_state.getMap();
 }
 
 fn bool update()
@@ -336,13 +354,18 @@ fn bool update()
     g_internal.buffer.clear();
     if (g_internal.next_state != null)
     {
+        // @Todo: cleanup current state + map
         g_internal.current_state = g_internal.next_state;
         g_internal.next_state = null;
+        g_internal.current_map = g_internal.current_state.getMap();
     }
+    assert(g_internal.current_state != null, "Current state is null in update()");
+    assert(g_internal.current_map != null, "Current map is null in update()");
     g_internal.current_state.update(g_internal.current_map);
     g_internal.current_map.update();
 
-    g_internal.buffer.write("Hello World", { 0, 10 }, rl::WHITE);
+    int[<2>] player_pos = g_internal.current_map.player.position();
+    g_internal.buffer.write(string::tformat("T%.1f  @ <%d %d>", g_internal.current_map.elapsed_time / 100.0f, player_pos[0], player_pos[1]), { 0, 0 }, rl::WHITE);
     g_internal.current_map.render(&g_internal.buffer);
 
     return true;

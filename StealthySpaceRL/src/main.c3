@@ -15,7 +15,7 @@ fn Map* TestGameState.getMap(&self) @dynamic
 	map.new_init(100, 100);
 
 	Player* player = mem::new(Player);
-	player.new_init({0, 0});
+	player.new_init({25, 25});
 	map.player = player;
 	return map;
 }
