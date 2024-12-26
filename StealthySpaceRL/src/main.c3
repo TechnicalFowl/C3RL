@@ -9,6 +9,14 @@ struct TestGameState (GameState)
 	ulong elapsed_time;
 }
 
+fn void TestGameState.new_init(&self) @dynamic
+{
+}
+
+fn void TestGameState.free(&self) @dynamic
+{
+}
+
 fn Map* TestGameState.getMap(&self) @dynamic
 {
 	Map* map = mem::new(Map);
@@ -35,6 +43,7 @@ fn int main(String[] args)
 	settings.hfont = "resources/cp437_8x16.png";
 	settings.font_size = 16;
 	TestGameState* test_game_state = mem::new(TestGameState);
+	test_game_state.new_init();
 	settings.initial_state = test_game_state;
 
 	@pool()

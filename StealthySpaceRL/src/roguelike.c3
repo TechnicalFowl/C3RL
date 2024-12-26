@@ -20,6 +20,8 @@ struct RLSettings
 
 interface GameState
 {
+    fn void free();
+
     fn Map* getMap();
     fn void update(Map* map);
 }
@@ -192,6 +194,16 @@ fn void Map.new_init(&self, int w, int h)
     }
 }
 
+fn void Map.free(&self)
+{
+    for (usz i = 0; i < (usz) self.width * self.height; i++)
+    {
+        self.tiles[i].objects.free();
+    }
+    mem::free(self.tiles);
+    self.actors.free();
+}
+
 struct ActorAction @private
 {
     Actor* actor;
@@ -354,9 +366,12 @@ fn bool update()
     g_internal.buffer.clear();
     if (g_internal.next_state != null)
     {
-        // @Todo: cleanup current state + map
+        g_internal.current_state.free();
+        mem::free(g_internal.current_state);
         g_internal.current_state = g_internal.next_state;
         g_internal.next_state = null;
+        g_internal.current_map.free();
+        mem::free(g_internal.current_map);
         g_internal.current_map = g_internal.current_state.getMap();
     }
     assert(g_internal.current_state != null, "Current state is null in update()");
