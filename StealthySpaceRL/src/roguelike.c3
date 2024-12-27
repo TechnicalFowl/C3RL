@@ -119,15 +119,15 @@ fn Action Player.update(&self, Map* map, int max_time) @dynamic
     {
         return makeMoveAction(100, { 0, -1 });
     }
-    else if (rl::isKeyPressed(rl::KEY_DOWN))
+    else if (rl::isKeyPressed(rl::KEY_DOWN) && max_time >= 100)
     {
         return makeMoveAction(100, { 0, 1 });
     }
-    else if (rl::isKeyPressed(rl::KEY_LEFT))
+    else if (rl::isKeyPressed(rl::KEY_LEFT) && max_time >= 100)
     {
         return makeMoveAction(100, { -1, 0 });
     }
-    else if (rl::isKeyPressed(rl::KEY_RIGHT))
+    else if (rl::isKeyPressed(rl::KEY_RIGHT) && max_time >= 100)
     {
         return makeMoveAction(100, { 1, 0 });
     }
@@ -139,19 +139,26 @@ fn void Player.apply(&self, Map* map, Action action) @dynamic
     switch (action.type)
     {
         case WaitAction.typeid:
-        {
             break;
-        }
         case MoveAction.typeid:
-        {
             MoveAction* move = (MoveAction*) action;
             int[<2>] new_pos = { self.pos[0] + move.dir[0], self.pos[1] + move.dir[1] };
             if (new_pos[0] >= 0 && new_pos[0] < map.width && new_pos[1] >= 0 && new_pos[1] < map.height)
             {
+                Tile* tile = map.getTile(new_pos[0], new_pos[1])!!;
+                if (!tile.passable)
+                {
+                    io::printn("You can't walk there");
+                    return;
+                }
+                if (move.dir[1] == 1) {io::printn("You walk up");}
+                else if (move.dir[1] == -1) {io::printn("You walk down");}
+                else if (move.dir[0] == 1) {io::printn("You walk right");}
+                else if (move.dir[0] == -1) {io::printn("You walk left");}
                 self.pos = new_pos;
             }
-            break;
-        }
+        default:
+            unreachable("Unhandeled action type in Player.apply()");
     }
 }
 
@@ -169,6 +176,46 @@ struct Tile
     List(<Object>) objects;
 }
 
+interface MapController
+{
+    fn void new_init();
+    fn void free();
+
+    fn MapDescription getDescription();
+    fn void update(Map* map, int time);
+}
+
+fn Map* createMap(MapController controller)
+{
+    MapDescription desc = controller.getDescription();
+    Map* map = mem::new(Map);
+    map.new_init(desc.width, desc.height);
+    map.controller = controller;
+
+    for (int y = 0; y < desc.height; y++)
+    {
+        for (int x = 0; x < desc.width; x++)
+        {
+            char c = desc.map_data[(usz) (y * (desc.width + 2) + x)];
+            Tile* tile = &map.tiles[(usz) (y * desc.width + x)];
+            tile.bg_tile = c;
+            tile.bg_color = rl::WHITE;
+            tile.passable = c == ' ';
+        }
+    }
+    
+	Player* player = mem::new(Player);
+	player.new_init({25, 25});
+	map.player = player;
+
+    return map;
+}
+
+fault MapFault
+{
+    OUT_OF_BOUNDS,
+}
+
 struct Map
 {
     int width;
@@ -179,6 +226,8 @@ struct Map
     List(<Actor>) actors;
 
     ulong elapsed_time;
+
+    MapController controller;
 }
 
 fn void Map.new_init(&self, int w, int h)
@@ -213,6 +262,7 @@ struct ActorAction @private
 fn void Map.update(&self)
 {
     assert(self.player != null, "Player is null in Map.update()");
+    assert(self.controller != null, "Controller is null in Map.update()");
     if (self.player.hasInput())
     {
         Action action = self.player.update(self, 1000000);
@@ -226,7 +276,6 @@ fn void Map.update(&self)
         foreach(&actor: self.actors)
         {
             Action act = actor.update(self, time);
-            if (act.type == WaitAction.typeid) continue;
             actions.push({ actor, act });
         }
         // @Todo: sort actions by time cost
@@ -235,9 +284,18 @@ fn void Map.update(&self)
             act.actor.apply(self, act.action);
         }
         self.player.apply(self, action);
-
+        self.controller.update(self, time);
         self.elapsed_time += time;
     }
+}
+
+fn Tile*! Map.getTile(&self, int x, int y)
+{
+    if (x >= 0 && x < self.width && y >= 0 && y < self.height)
+    {
+        return &self.tiles[(usz) (y * self.width + x)];
+    }
+    return MapFault.OUT_OF_BOUNDS?;
 }
 
 fn void Map.render(&self, TextBuffer* buffer)
@@ -251,7 +309,7 @@ fn void Map.render(&self, TextBuffer* buffer)
         for (int x = math::max(0, min_pos[0]); x < math::min(self.width, max_pos[0]); x++)
         {
             int[<2>] screen_pos = { x - min_pos[0], y - min_pos[1] };
-            Tile* tile = &self.tiles[(usz) (y * self.width + x)];
+            Tile* tile = self.getTile(x, y)!!;
             buffer.set(screen_pos, tile.bg_tile, tile.bg_color, rl::BLACK);
             foreach(&obj: tile.objects)
             {

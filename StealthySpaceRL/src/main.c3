@@ -2,6 +2,7 @@ module stealthyspacerl;
 import std::io;
 
 import roguelike;
+import roguelike::maps;
 
 struct TestGameState (GameState)
 {
@@ -19,13 +20,8 @@ fn void TestGameState.free(&self) @dynamic
 
 fn Map* TestGameState.getMap(&self) @dynamic
 {
-	Map* map = mem::new(Map);
-	map.new_init(100, 100);
-
-	Player* player = mem::new(Player);
-	player.new_init({25, 25});
-	map.player = player;
-	return map;
+	roguelike::MapController ctrl = mem::new(maps::StationController);
+	return roguelike::createMap(ctrl);
 }
 
 fn void TestGameState.update(&self, Map* map) @dynamic
