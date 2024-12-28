@@ -35,8 +35,8 @@ fn int main(String[] args)
 	settings.width = 80;
 	settings.height = 45;
 	settings.name = "StealthySpaceRL";
-	settings.font = "resources/cp437_16x16.png";
-	settings.hfont = "resources/cp437_8x16.png";
+	settings.font = "../assets/cp437_16x16.png";
+	settings.hfont = "../assets/cp437_8x16.png";
 	settings.font_size = 16;
 	TestGameState* test_game_state = mem::new(TestGameState);
 	test_game_state.new_init();
