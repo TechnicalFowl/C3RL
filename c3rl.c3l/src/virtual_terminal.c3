@@ -24,7 +24,6 @@ struct VirtualTerminal
 
     Font* font;
     Font* hfont;
-    bool supports_half_size_text;
 }
 VirtualTerminal* terminal;
 

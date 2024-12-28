@@ -95,6 +95,8 @@ struct Font
 
 fn void request_screenshot(String filename);
 
+// @Todo: Better RNG with range options and easy dice roll functions
+
 module c3rl::colors;
 
 fn Color Color.add(&self, Color other);
