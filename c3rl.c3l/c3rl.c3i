@@ -41,6 +41,9 @@ fn void VirtualTerminal.box_text(&self, int x, int y, int w, int h, bool double_
 fn void VirtualTerminal.write(&self, int x, int y, String text, rl::Color fg=colors::WHITE, int priority=0);
 fn void VirtualTerminal.render(&self);
 
+def LineCallback = fn void(void* data, int[<2>] next);
+fn void line(int[<2>] start, int[<2>] end, LineCallback callback, void* data=null);
+
 interface Component
 {
 

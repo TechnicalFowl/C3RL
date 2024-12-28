@@ -36,7 +36,7 @@ fn void Ex2.tick(&self) @dynamic
     {
         self.tick_time = 0;
 
-        int direction = self.rng.next_int() % 4 + 1;
+        int direction = random::next_in_range(&self.rng, 1, 4);
         switch (direction)
         {
             case 1: self.player_x += 1; break;
@@ -49,7 +49,7 @@ fn void Ex2.tick(&self) @dynamic
         self.player_y = math::clamp(self.player_y, 0, 45);
     }
 
-	c3rl::terminal.clear_to({{'.', 0}, colors::WHITE, 0, colors::BLACK, 0});
+	c3rl::terminal.clear_to({{'.', 0}, colors::DARK_GREY, 0, colors::BLACK, 0});
     c3rl::terminal.set_tile(self.player_x, self.player_y, '@', colors::YELLOW);
 }
 
@@ -59,6 +59,7 @@ fn void main()
     game.tick_duration = 0.5;
     game.player_x = 10;
     game.player_y = 10;
+    random::seed_entropy(&game.rng);
 
 	c3rl::launch(&game);
 }
