@@ -78,8 +78,6 @@ fn void Zone.update(&self)
     {
         Action player_action = self.player.next_action(100000);
         if (player_action == null) return;
-        
-        io::printn("Executing turn");
 
         double max_time = player_action.duration();
         PriorityQueue(<EntityAction*>) actions;
@@ -96,7 +94,7 @@ fn void Zone.update(&self)
         while (!actions.is_empty())
         {
             EntityAction* next = actions.pop()!!;
-            apply(next.entity, next.next_action);
+            next.next_action.apply(next.entity);
             if (next.remaining_time > 0)
             {
                 Action continuation = next.entity.next_action(next.remaining_time);

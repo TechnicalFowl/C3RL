@@ -11,8 +11,9 @@ interface Event
 }
 
 interface Action
-{    
+{
     fn double duration();
+    fn void apply(Entity ent);
 }
 
 struct WaitAction (Action)
@@ -20,10 +21,9 @@ struct WaitAction (Action)
     double time;
 }
 fn double WaitAction.duration(&self) @dynamic => self.time;
-
-fn void applyWaitAction(Entity ent, WaitAction* act)
+fn void WaitAction.apply(&self, Entity ent) @dynamic
 {
-    ent.give_idle_time(act.time);
+    ent.give_idle_time(self.time);
 }
 
 struct MoveAction (Action)
@@ -32,33 +32,14 @@ struct MoveAction (Action)
 }
 fn double MoveAction.duration(&self) @dynamic => 1.0;
 
-fn void applyMoveAction(Entity entity, MoveAction* action)
+fn void MoveAction.apply(&self, Entity entity) @dynamic
 {
-    int[<2>] new_pos = entity.get_position() + action.move;
+    int[<2>] new_pos = entity.get_position() + self.move;
 
     ZoneCell* cell = entity.get_zone().get_cell(...new_pos);
     if (cell.terrain.passable)
     {
         entity.set_position(new_pos);
-    }
-}
-
-/*
-macro void @apply(&e, &act)
-{
-    String $func = string::new_format("apply%s", $stringify($typeof(act)));
-    $eval($func)(e, act);
-}
-*/
-
-fn void apply(Entity e, Action act)
-{
-    switch (act.type)
-    {
-        case WaitAction.typeid:
-            applyWaitAction(e, (WaitAction*) act);
-        case MoveAction.typeid:
-            applyMoveAction(e, (MoveAction*) act);
     }
 }
 
