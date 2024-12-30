@@ -1,5 +1,6 @@
 module c3rl;
 
+import std::collections::list;
 import std::collections::map;
 import std::io;
 
@@ -26,6 +27,13 @@ fn void WaitAction.apply(&self, Entity ent) @dynamic
     ent.give_idle_time(self.time);
 }
 
+fn WaitAction* do_wait(double time)
+{
+    WaitAction* wait = mem::temp_alloc(WaitAction);
+    wait.time = time;
+    return wait;
+}
+
 struct MoveAction (Action)
 {
     int[<2>] move;
@@ -43,8 +51,17 @@ fn void MoveAction.apply(&self, Entity entity) @dynamic
     }
 }
 
+fn MoveAction* do_move(int[<2>] move)
+{
+    MoveAction* move_action = mem::temp_alloc(MoveAction);
+    move_action.move = move;
+    return move_action;
+}
+
 interface Entity
 {
+    fn void free();
+
     fn Zone* get_zone();
     fn String get_name();
     fn int[<2>] get_position();
@@ -114,10 +131,48 @@ fn void EntityCommon.new_init(&self, Zone* z, String n, int[<2>] p, char g, rl::
     self.color = c;
 }
 
+fn void EntityCommon.free(&self) @dynamic
+{
+    self.name.free();
+}
+
 fn Action EntityCommon.next_action(&self, double max_time) @dynamic
 {
     if (max_time <= 0) return null;
     WaitAction* wait = mem::temp_alloc(WaitAction);
     wait.time = max_time - self.idle_time;
     return wait;
+}
+
+struct Navigator
+{
+    List(<int[<2>]>) path;
+}
+
+fn void Navigator.new_init(&self)
+{
+    self.path.new_init();
+}
+fn void Navigator.free(&self)
+{
+    self.path.free();
+}
+
+fn bool Navigator.is_idle(&self) => self.path.is_empty();
+
+fn void Navigator.path_to(&self, Zone* zone, int[<2>] start, int[<2>] end)
+{
+    self.path.clear();
+    zone.path(start, end, &self.path, diagonal_moves: false, reverse: true);
+}
+
+fn int[<2>] Navigator.next_point(&self)
+{
+    assert(!self.path.is_empty(), "No path to follow");
+    return self.path.pop()!!;
+}
+
+fn void Navigator.abort(&self)
+{
+    self.path.clear();
 }

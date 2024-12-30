@@ -1,6 +1,7 @@
 module c3rl;
 
 import std::collections::list;
+import std::collections::map;
 import std::collections::priorityqueue;
 import std::io;
 import std::math;
@@ -53,6 +54,21 @@ fn void Zone.new_init(&self, ZoneDescription desc)
     assert(self.player != null, "No player provided");
 }
 
+fn void Zone.free(&self)
+{
+    for (int i = 0; i < self.width * self.height; ++i)
+    {
+        self.cells[i].entities.free();
+    }
+    mem::free(self.cells);
+
+    foreach (ent: self.all_entities)
+    {
+        ent.free();
+    }
+    self.all_entities.free();
+}
+
 struct EntityAction
 {
     Entity entity;
@@ -60,7 +76,7 @@ struct EntityAction
     double duration;
     double remaining_time;
 }
-fn bool less(EntityAction* a, EntityAction* b) => a.duration < b.duration;
+fn bool EntityAction.less(EntityAction* a, EntityAction* b) => a.duration < b.duration;
 
 fn EntityAction* make_entity_action(Entity e, Action act, double duration, double remaining)
 {
@@ -81,6 +97,7 @@ fn void Zone.update(&self)
 
         double max_time = player_action.duration();
         PriorityQueue(<EntityAction*>) actions;
+        actions.new_init(math::max(self.all_entities.len() + 1u64, 16u64), allocator::temp());
         actions.push(make_entity_action(self.player, player_action, max_time, 0));
 
         foreach (ent: self.all_entities)
@@ -137,6 +154,34 @@ fn void Zone.add_entity(&self, Entity e)
     cell.entities.push(e);
 }
 
+fn int[<2>] Zone.get_player_position(&self)
+{
+    assert(self.player != null, "No player in zone");
+    return self.player.get_position();
+}
+
+fn int[<2>] Zone.get_mouse_position(&self)
+{
+    int hw = terminal.width / 2;
+    int hh = terminal.height / 2;
+
+    int focus_x = hw;
+    int focus_y = hh;
+
+    if (self.player)
+    {
+        focus_x = self.player.get_position()[0];
+        focus_y = self.player.get_position()[1];
+    }
+
+    int min_y = focus_y - hh;
+    int min_x = focus_x - hw;
+
+    int x = min_x + rl::getMouseX() / settings.default_font_size;
+    int y = min_y + rl::getMouseY() / settings.default_font_size;
+    return {x, y};
+}
+
 fn void Zone.render(&self, VirtualTerminal* term)
 {
     int hw = term.width / 2;
@@ -176,6 +221,110 @@ fn void Zone.render(&self, VirtualTerminal* term)
             }
         }
     }
+}
+
+fn double get_diag_heuristic(int[<2>] a, int[<2>] b)
+{
+    int dx = math::abs(a[0] - b[0]);
+    int dy = math::abs(a[1] - b[1]);
+    return (double) (dx + dy) + (-0.58578643762) * math::min(dx, dy);
+}
+
+fn double get_heuristic(int[<2>] a, int[<2>] b)
+{
+    int dx = math::abs(a[0] - b[0]);
+    int dy = math::abs(a[1] - b[1]);
+    return (double) (dx + dy);
+}
+
+fn uint int[<2>].hash(self) => ((uint) self[0]) * 2654435761u + ((uint) self[1]);
+
+struct AStarStep
+{
+    int[<2>] pos;
+    int[<2>] last;
+    double cost;
+}
+
+fn bool AStarStep.less(AStarStep* a, AStarStep b) => a.cost < b.cost;
+
+const int[<2>][4] DIRECT_NEIGHBORS = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
+const int[<2>][4] DIAGONAL_NEIGHBORS = { {-1, -1}, {1, -1}, {-1, 1}, {1, 1} };
+
+fn bool Zone.path(&self, int[<2>] from, int[<2>] to, List(<int[<2>]>)* results, bool diagonal_moves=true, bool reverse=false)
+{
+    PriorityQueue(<AStarStep>) frontier;
+    frontier.temp_init(16);
+    HashMap(<int[<2>], AStarStep>) came_from;
+    came_from.temp_init(16);
+
+    frontier.push({from, from, 0});
+    came_from.set(from, {from, from, 0});
+
+    //io::printfn("Pathfinding from [%d %d] to [%d %d]", ...from, ...to);
+
+    while (!frontier.is_empty())
+    {
+        AStarStep current = frontier.pop()!!;
+        if (current.pos == to) break;
+        
+        foreach (n: DIRECT_NEIGHBORS)
+        {
+            int[<2>] next = current.pos + n;
+            if (next[0] < 0 || next[0] >= self.width || next[1] < 0 || next[1] >= self.height) continue;
+            ZoneCell* cell = self.get_cell(...next);
+            if (!cell.terrain.passable) continue;
+            
+            double new_cost = current.cost + 1;
+            double h_cost = new_cost + (diagonal_moves ? get_diag_heuristic(next, to) : get_heuristic(next, to));
+            AStarStep! existing = came_from.get(next);
+            if (try existing && existing.cost <= h_cost) continue;
+            AStarStep next_step = {next, current.pos, h_cost};
+            //io::printfn("Adding [%d %d] to frontier pathed from [%d %d] with cost %.1f", ...next, ...current.pos, next_step.cost);
+            frontier.push(next_step);
+            came_from.set(next, next_step);
+        }
+        if (diagonal_moves)
+        {
+            foreach (n: DIAGONAL_NEIGHBORS)
+            {
+                int[<2>] next = current.pos + n;
+                if (next[0] < 0 || next[0] >= self.width || next[1] < 0 || next[1] >= self.height) continue;
+                ZoneCell* cell = self.get_cell(...next);
+                if (!cell.terrain.passable) continue;
+                
+                double new_cost = current.cost + 1.414;
+                double h_cost = new_cost + get_diag_heuristic(next, to);
+                AStarStep! existing = came_from.get(next);
+                if (try existing && existing.cost <= h_cost) continue;
+                AStarStep next_step = {next, current.pos, h_cost};
+                //io::printfn("Adding [%d %d] to frontier pathed from [%d %d] with cost %.1f", ...next, ...current.pos, next_step.cost);
+                frontier.push(next_step);
+                came_from.set(next, next_step);
+            }
+        }
+    }
+
+    if (!came_from.has_key(to)) return false;
+
+    int[<2>] step_back = to;
+
+    results.clear();
+    while (step_back != from)
+    {
+        results.push(step_back);
+        AStarStep! step = came_from.get(step_back);
+        if (catch step)
+        {
+            unreachable("Pathfinding error");
+        }
+        step_back = step.last;
+    }
+    if (!reverse) results.reverse();
+
+    //io::printfn("Done pathfinding, found %d steps", results.len());
+    //io::printn(results);
+    return true;
 }
 
 def ZoneGenerator = fn void(void* data, Zone* zone);

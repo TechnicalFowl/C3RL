@@ -204,9 +204,9 @@ fn Map* createMap(MapController controller)
         }
     }
     
-	Player* player = mem::new(Player);
-	player.new_init({25, 25});
-	map.player = player;
+    Player* player = mem::new(Player);
+    player.new_init({25, 25});
+    map.player = player;
 
     return map;
 }

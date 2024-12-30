@@ -8,6 +8,7 @@ Font* root_font;
 Font* root_hfont;
 bool taking_screenshot = false;
 String screenshot_filename;
+RLSettings settings;
 
 struct RLSettings
 {
@@ -54,7 +55,7 @@ fn void launch(RLGame game)
 
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Initializing...");
     
-    RLSettings settings = game.settings();
+    settings = game.settings();
 
     rl::initWindow(settings.terminal_width * settings.default_font_size, settings.terminal_height * settings.default_font_size, settings.window_title);
     rl::setTargetFPS(60);
@@ -88,31 +89,36 @@ fn void launch(RLGame game)
 
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Starting game loop...");
 
-    while (!rl::windowShouldClose())
+    @pool()
     {
-        rl::beginDrawing();
-        rl::clearBackground(colors::BLACK);
-
-        terminal.clear(colors::BLACK);
-
-        game.tick();
-
-        if (zone)
+        allocator::TempAllocator* temp = allocator::temp();
+        while (!rl::windowShouldClose())
         {
-            zone.update();
-            zone.render(terminal);
+            temp.reset(0);
+            rl::beginDrawing();
+            rl::clearBackground(colors::BLACK);
+
+            terminal.clear(colors::BLACK);
+
+            if (zone)
+            {
+                zone.update();
+                zone.render(terminal);
+            }
+
+            game.tick();
+
+            terminal.render();
+
+            rl::endDrawing();
+
+            if (taking_screenshot)
+            {
+                rl::takeScreenshot(screenshot_filename.zstr_tcopy());
+                taking_screenshot = false;
+            }
         }
-
-        terminal.render();
-
-        rl::endDrawing();
-
-        if (taking_screenshot)
-        {
-            rl::takeScreenshot(screenshot_filename.zstr_tcopy());
-            taking_screenshot = false;
-        }
-    }
+    };
     
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Shutting down...");
 }
