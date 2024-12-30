@@ -1,4 +1,4 @@
-module c3rl_ex1;
+module c3rl_ex3;
 
 import std::collections::list;
 import std::math::random;
@@ -24,14 +24,14 @@ struct Ex3 (RLGame)
 // This is the settings for the game. We're using the default font, 16x16 characters, and a 80x45 terminal.
 fn RLSettings Ex3.settings(&self) @dynamic
 {
-	return {
-		"../../assets", // asset_path
-		"cp437", // default_font_name
-		16, // default_font_size
-		80, // terminal_width
-		45, // terminal_height
-		"C3RL Example 3", // window_title
-	};
+	return c3rl::make_settings(
+		asset_path: "../../assets",
+		default_font_name: "cp437",
+		default_font_size: 16,
+		terminal_width: 80,
+		terminal_height: 45,
+		window_title: "C3RL Example 3",
+    );
 }
 
 fn void Ex3.add_to_path(&self, int[<2>] point)

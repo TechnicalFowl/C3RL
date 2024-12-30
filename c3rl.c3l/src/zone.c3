@@ -1,5 +1,83 @@
 module c3rl;
 
+import std::collections::list;
+
+import raylib5::rl;
+
+Zone* zone;
+
+struct ZoneTerrain
+{
+    char glyph;
+    rl::Color fg;
+    rl::Color bg;
+    bool passable;
+}
+
+struct ZoneCell
+{
+    ZoneTerrain terrain;
+    List(<Entity*>) entities;
+}
+
+struct Zone
+{
+    String name;
+    int width;
+    int height;
+    ZoneCell* cells;
+
+    Ecs ecs;
+}
+
+fn void Zone.new_init(&self, ZoneDescription desc)
+{
+    self.name = desc.name;
+}
+
+fn void Zone.update(&self, double delta)
+{
+    self.ecs.update(delta);
+}
+
+fn ZoneCell* Zone.get_cell(&self, int x, int y)
+{
+    return &self.cells[y * self.width + x];
+}
+
+fn void Zone.set_terrain(&self, int x, int y, char glyph, rl::Color fg, rl::Color bg, bool passable)
+{
+    ZoneCell* cell = self.get_cell(x, y);
+    cell.terrain.glyph = glyph;
+    cell.terrain.fg = fg;
+    cell.terrain.bg = bg;
+    cell.terrain.passable = passable;
+}
+
+def ZoneGenerator = fn void(void* data, Zone* zone);
+struct ZoneDescription
+{
+    String name;
+    int width;
+    int height;
+
+    int[<2>] player_spawn;
+
+    ZoneGenerator generator;
+}
+
+fn void ZoneDescription.new_init(&self, String name, int width, int height)
+{
+    self.name = name;
+    self.width = width;
+    self.height = height;
+}
+
+fn void load_zone(ZoneDescription desc)
+{
+    zone = mem::new(Zone);
+}
+
 def LineCallback = fn void(void* data, int[<2>] next);
 fn void line(int[<2>] start, int[<2>] end, LineCallback callback, void* data=null)
 {

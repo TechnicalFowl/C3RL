@@ -17,6 +17,29 @@ struct RLSettings
     int terminal_width; // The starting width of the screen/terminal, in default_font_size characters
     int terminal_height; // The starting width of the screen/terminal, in default_font_size characters
     String window_title; // The title of the window
+    
+    ZoneDescription initial_zone; // The initial zone to start the game in
+}
+
+fn RLSettings make_settings(
+    String asset_path="",
+    String default_font_name="cp437",
+    int default_font_size=16,
+    int terminal_width=80,
+    int terminal_height=45,
+    String window_title="C3RL Game",
+    ZoneDescription initial_zone = { "" }
+)
+{
+    return {
+        asset_path,
+        default_font_name,
+        default_font_size,
+        terminal_width,
+        terminal_height,
+        window_title,
+        initial_zone
+    };
 }
 
 interface RLGame
