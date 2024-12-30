@@ -59,7 +59,7 @@ fn void VirtualTerminal.clear_to(&self, VCell glyph)
 
 fn void VirtualTerminal.set_background(&self, int x, int y, rl::Color bg, int priority=0)
 {
-    assert(x >= 0 && x < self.width && y >= 0 && y < self.height);
+    assert(x >= 0 && x < self.width && y >= 0 && y < self.height, "Position [%d %d] must be greater than zero and less than [%d %d]", x, y, self.width, self.height);
     
     VCell* cell = &self.buffer[self.width * y + x];
     if (priority >= cell.bg_priority)

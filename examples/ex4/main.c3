@@ -3,14 +3,62 @@ module c3rl_ex4;
 import std::collections::list;
 import std::math::random;
 
+import raylib5::rl;
+
 import c3rl;
 
 struct Ex4 (RLGame)
 {
 	random::Pcg32Random rng;
+}
 
-    double tick_duration;
-    double tick_time;
+struct Player (Entity)
+{
+    inline EntityCommon entity;
+}
+
+// @Todo: There should be an easy way to avoid this boilerplate?...
+fn Zone* Player.get_zone(&self) @dynamic => self.entity.get_zone();
+fn String Player.get_name(&self) @dynamic => self.entity.get_name();
+fn int[<2>] Player.get_position(&self) @dynamic => self.entity.get_position();
+fn void Player.set_position(&self, int[<2>] pos) @dynamic => self.entity.set_position(pos);
+fn char Player.get_glyph(&self) @dynamic => self.entity.get_glyph();
+fn rl::Color Player.get_color(&self) @dynamic => self.entity.get_color();
+fn double Player.get_idle_time(&self) @dynamic => self.entity.get_idle_time();
+fn void Player.give_idle_time(&self, double time) @dynamic => self.entity.give_idle_time(time);
+
+fn void Player.new_init(&self, Zone* z, String n, int[<2>] p)
+{
+    self.entity.new_init(z, n, p, '@', colors::WHITE);
+}
+
+fn Action Player.next_action(&self, double max_time) @dynamic
+{
+    if (rl::isKeyPressed(rl::KEY_W))
+    {
+        MoveAction* move = mem::temp_alloc(MoveAction);
+        move.move = {0, -1};
+        return move;
+    }
+    if (rl::isKeyPressed(rl::KEY_S))
+    {
+        MoveAction* move = mem::temp_alloc(MoveAction);
+        move.move = {0, 1};
+        return move;
+    }
+    if (rl::isKeyPressed(rl::KEY_A))
+    {
+        MoveAction* move = mem::temp_alloc(MoveAction);
+        move.move = {-1, 0};
+        return move;
+    }
+    if (rl::isKeyPressed(rl::KEY_D))
+    {
+        MoveAction* move = mem::temp_alloc(MoveAction);
+        move.move = {1, 0};
+        return move;
+    }
+    return null;
 }
 
 fn void Ex4.zone_generator(&self, Zone* zone)
@@ -31,15 +79,18 @@ fn void Ex4.zone_generator(&self, Zone* zone)
         }
     }
 
-    Entity* player = zone.ecs.add_entity("player", {10, 10});
+    Player* pl = mem::new(Player);
+    pl.new_init(zone, "Player", {10, 10});
+    zone.add_player((Entity) pl);
 }
 
-fn ZoneDescription make_zone()
+fn ZoneDescription Ex4.make_zone(&self)
 {
     ZoneDescription zone;
     zone.new_init("main", 80, 45);
     zone.player_spawn = {10, 10};
     zone.generator = (ZoneGenerator) &Ex4.zone_generator;
+    zone.generator_data = self;
     return zone;
 }
 
@@ -53,27 +104,18 @@ fn RLSettings Ex4.settings(&self) @dynamic
 		terminal_width: 80,
 		terminal_height: 45,
 		window_title: "C3RL Example 4",
-        initial_zone: make_zone()
+        initial_zone: self.make_zone()
     );
 }
 
 // Tick is called every frame.
 fn void Ex4.tick(&self) @dynamic
 {
-    self.tick_time += 1 / 60.0;
-    if (self.tick_time > self.tick_duration)
-    {
-        self.tick_time = 0;
-
-    }
-
-	c3rl::terminal.clear_to({{'.', 0}, colors::DARK_GREY, 0, colors::BLACK, 0});
 }
 
 fn void main()
 {
 	Ex4 game;
-    game.tick_duration = 0.2;
     random::seed_entropy(&game.rng);
 
 	c3rl::launch(&game);

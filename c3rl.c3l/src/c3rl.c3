@@ -79,7 +79,13 @@ fn void launch(RLGame game)
 
     terminal = mem::new(VirtualTerminal);
     terminal.new_init(settings.terminal_width, settings.terminal_height);
-    
+
+    if (settings.initial_zone.width != 0)
+    {
+        rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Loading Zone...");
+        load_zone(settings.initial_zone);
+    }
+
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Starting game loop...");
 
     while (!rl::windowShouldClose())
@@ -90,6 +96,12 @@ fn void launch(RLGame game)
         terminal.clear(colors::BLACK);
 
         game.tick();
+
+        if (zone)
+        {
+            zone.update();
+            zone.render(terminal);
+        }
 
         terminal.render();
 
