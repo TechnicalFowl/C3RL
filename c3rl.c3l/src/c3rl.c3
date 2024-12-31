@@ -29,7 +29,7 @@ fn RLSettings make_settings(
     int terminal_width=80,
     int terminal_height=45,
     String window_title="C3RL Game",
-    ZoneDescription initial_zone = { "" }
+    ZoneDescription initial_zone = {}
 )
 {
     return {

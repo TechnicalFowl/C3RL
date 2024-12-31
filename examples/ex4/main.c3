@@ -18,6 +18,7 @@ struct Player (Entity)
 }
 
 // @Todo: There should be an easy way to avoid this boilerplate?...
+fn void Player.free(&self) @dynamic => self.entity.free();
 fn Zone* Player.get_zone(&self) @dynamic => self.entity.get_zone();
 fn String Player.get_name(&self) @dynamic => self.entity.get_name();
 fn int[<2>] Player.get_position(&self) @dynamic => self.entity.get_position();
@@ -36,27 +37,19 @@ fn Action Player.next_action(&self, double max_time) @dynamic
 {
     if (rl::isKeyPressed(rl::KEY_W))
     {
-        MoveAction* move = mem::temp_alloc(MoveAction);
-        move.move = {0, -1};
-        return move;
+        return c3rl::do_move({0, -1});
     }
     if (rl::isKeyPressed(rl::KEY_S))
     {
-        MoveAction* move = mem::temp_alloc(MoveAction);
-        move.move = {0, 1};
-        return move;
+        return c3rl::do_move({0, 1});
     }
     if (rl::isKeyPressed(rl::KEY_A))
     {
-        MoveAction* move = mem::temp_alloc(MoveAction);
-        move.move = {-1, 0};
-        return move;
+        return c3rl::do_move({-1, 0});
     }
     if (rl::isKeyPressed(rl::KEY_D))
     {
-        MoveAction* move = mem::temp_alloc(MoveAction);
-        move.move = {1, 0};
-        return move;
+        return c3rl::do_move({1, 0});
     }
     return null;
 }
@@ -81,7 +74,7 @@ fn void Ex4.zone_generator(&self, Zone* zone)
 
     Player* pl = mem::new(Player);
     pl.new_init(zone, "Player", {10, 10});
-    zone.add_player((Entity) pl);
+    zone.add_player(pl);
 }
 
 fn ZoneDescription Ex4.make_zone(&self)

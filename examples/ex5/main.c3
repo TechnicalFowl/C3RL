@@ -86,7 +86,7 @@ fn void Ex5.zone_generator(&self, Zone* zone)
 
     Player* pl = mem::new(Player);
     pl.new_init(zone, "Player", {10, 10});
-    zone.add_player((Entity) pl);
+    zone.add_player(pl);
 }
 
 fn ZoneDescription Ex5.make_zone(&self)
