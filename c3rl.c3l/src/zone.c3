@@ -35,6 +35,10 @@ struct Zone
     List(<Entity>) all_entities;
 }
 
+<*
+@require desc.width > 0, "Zone width must be greater than 0"
+@require desc.height > 0, "Zone height must be greater than 0"
+*>
 fn void Zone.new_init(&self, ZoneDescription desc)
 {
     self.name = desc.name;
@@ -129,9 +133,12 @@ fn void Zone.update(&self)
     };
 }
 
+<*
+@require x >= 0, x < self.width, "Position x out of bounds"
+@require y >= 0, y < self.height, "Position y out of bounds"
+*>
 fn ZoneCell* Zone.get_cell(&self, int x, int y)
 {
-    assert(x >= 0 && x < self.width && y >= 0 && y < self.height, "Position [%d %d] must be greater than zero and less than [%d %d]", x, y, self.width, self.height);
     return &self.cells[y * self.width + x];
 }
 
@@ -144,17 +151,21 @@ fn void Zone.set_terrain(&self, int x, int y, char glyph, rl::Color fg, rl::Colo
     cell.terrain.passable = passable;
 }
 
+<*
+@param [&in] e
+*>
 fn void Zone.add_player(&self, Entity e)
 {
-    assert(e != null);
     self.player = e;
     ZoneCell* cell = self.get_cell(...e.get_position());
     cell.entities.push(e);
 }
 
+<*
+@param [&in] e
+*>
 fn void Zone.add_entity(&self, Entity e)
 {
-    assert(e != null);
     self.all_entities.push(e);
     ZoneCell* cell = self.get_cell(...e.get_position());
     cell.entities.push(e);
@@ -168,26 +179,23 @@ fn IVec2 Zone.get_player_position(&self)
 
 fn IVec2 Zone.get_mouse_position(&self)
 {
-    int hw = terminal.width / 2;
-    int hh = terminal.height / 2;
-
-    int focus_x = hw;
-    int focus_y = hh;
+    int min_x = 0;
+    int min_y = 0;
 
     if (self.player)
     {
-        focus_x = self.player.get_position()[0];
-        focus_y = self.player.get_position()[1];
+        min_x = self.player.get_position()[0] - terminal.width / 2;
+        min_y = self.player.get_position()[1] - terminal.height / 2;
     }
-
-    int min_y = focus_y - hh;
-    int min_x = focus_x - hw;
 
     int x = min_x + rl::getMouseX() / settings.default_font_size;
     int y = min_y + rl::getMouseY() / settings.default_font_size;
     return {x, y};
 }
 
+<*
+@param [&in] term
+*>
 fn void Zone.render(&self, VirtualTerminal* term)
 {
     int hw = term.width / 2;
@@ -253,8 +261,6 @@ fn double get_heuristic(IVec2 a, IVec2 b)
     return (double) (dx + dy);
 }
 
-fn uint IVec2.hash(self) => ((uint) self[0]) * 2654435761u + ((uint) self[1]);
-
 struct AStarStep
 {
     IVec2 pos;
@@ -267,6 +273,13 @@ fn bool AStarStep.less(AStarStep* a, AStarStep b) => a.cost < b.cost;
 const IVec2[4] DIRECT_NEIGHBORS = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
 const IVec2[4] DIAGONAL_NEIGHBORS = { {-1, -1}, {1, -1}, {-1, 1}, {1, 1} };
 
+<*
+@param [&in] results
+@require from[0] >= 0, from[0] < self.width, "From x out of bounds"
+@require from[1] >= 0, from[1] < self.height, "From y out of bounds"
+@require to[0] >= 0, to[0] < self.width, "To x out of bounds"
+@require to[1] >= 0, to[1] < self.height, "To y out of bounds"
+*>
 fn bool Zone.path(&self, IVec2 from, IVec2 to, List(<IVec2>)* results, bool diagonal_moves=true, bool reverse=false)
 {
     PriorityQueue(<AStarStep>) frontier;
@@ -330,10 +343,7 @@ fn bool Zone.path(&self, IVec2 from, IVec2 to, List(<IVec2>)* results, bool diag
     {
         results.push(step_back);
         AStarStep! step = came_from.get(step_back);
-        if (catch step)
-        {
-            unreachable("Pathfinding error");
-        }
+        if (catch step) unreachable("Pathfinding error");
         step_back = step.last;
     }
     if (!reverse) results.reverse();
@@ -354,6 +364,10 @@ struct ZoneDescription
     void* generator_data;
 }
 
+<*
+@require width > 0, "Zone width must be greater than 0"
+@require height > 0, "Zone height must be greater than 0"
+*>
 fn void ZoneDescription.new_init(&self, String name, int width, int height)
 {
     self.name = name;

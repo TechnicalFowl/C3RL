@@ -22,6 +22,10 @@ fn void set_font_directory(String path)
     font_directory = path;
 }
 
+<*
+@require size[0] > 0, "Font width must be greater than zero"
+@require size[1] > 0, "Font height must be greater than zero"
+*>
 fn Font*! get_font(String font_name, IVec2 size)
 {
     String path = string::new_format("%s/%s_%dx%d.png", font_directory, font_name, size[0], size[1]);

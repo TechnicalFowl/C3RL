@@ -2,7 +2,9 @@ module c3rl;
 
 import std::math;
 
-def IVec2 = int[<2>];
+def IVec2 = int[<2>]; 
+
+fn uint IVec2.hash(self) => ((uint) self[0]) * 2654435761u + ((uint) self[1]);
 
 fn IVec2 ivec2_sign(IVec2 v)
 {

@@ -1,6 +1,7 @@
 module c3rl_ex5;
 
 import std::collections::list;
+import std::io;
 import std::math::random;
 
 import raylib5::rl;

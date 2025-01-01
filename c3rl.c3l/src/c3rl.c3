@@ -56,6 +56,9 @@ interface ResizeEvent
     fn void on_resize(int new_width, int new_height);
 }
 
+<*
+@param [&in] game
+*>
 fn void launch(RLGame game)
 {
     //internal::waitForDebugger();

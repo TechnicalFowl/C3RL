@@ -18,8 +18,8 @@ struct VCell
 
 struct VirtualTerminal
 {
-    int width;
-    int height;
+    uint width;
+    uint height;
 
     VCell* buffer;
 
@@ -28,6 +28,9 @@ struct VirtualTerminal
 }
 VirtualTerminal* terminal;
 
+<*
+@require w > 0, h > 0, "Width and height must be greater than zero"
+*>
 fn void VirtualTerminal.new_init(&self, int w, int h)
 {
     self.width = w;
@@ -45,6 +48,9 @@ fn void VirtualTerminal.free(&self)
     mem::free(self.buffer);
 }
 
+<*
+@require new_width > 0, new_height > 0, "Width and height must be greater than zero"
+*>
 fn void VirtualTerminal.on_resize(&self, int new_width, int new_height) @dynamic
 {
     int new_term_width = new_width / self.font.width;
@@ -68,10 +74,12 @@ fn void VirtualTerminal.clear_to(&self, VCell glyph)
     }
 }
 
+<*
+@require x >= 0 && x < self.width
+@require y >= 0 && y < self.height
+*>
 fn void VirtualTerminal.set_background(&self, int x, int y, rl::Color bg, int priority=0)
 {
-    assert(x >= 0 && x < self.width && y >= 0 && y < self.height, "Position [%d %d] must be greater than zero and less than [%d %d]", x, y, self.width, self.height);
-    
     VCell* cell = &self.buffer[self.width * y + x];
     if (priority >= cell.bg_priority)
     {
@@ -80,16 +88,17 @@ fn void VirtualTerminal.set_background(&self, int x, int y, rl::Color bg, int pr
     }
 }
 
+<*
+@require x0 >= 0 && x0 + w < self.width
+@require y0 >= 0 && y0 + h < self.height
+@require w > 0
+@require h > 0
+*>
 fn void VirtualTerminal.fill_background(&self, int x0, int y0, int w, int h, rl::Color bg, int priority=0)
 {
-    int x_min = math::max(0, x0);
-    int y_min = math::max(0, y0);
-    int x_max = math::min(self.width - 1, x0 + w - 1);
-    int y_max = math::min(self.height - 1, y0 + h - 1);
-
-    for (int y = y_min; y <= y_max; y++)
+    for (int y = y0; y < y0 + h; y++)
     {
-        for (int x = x_min; x <= x_max; x++)
+        for (int x = x0; x < x0 + w; x++)
         {
             VCell* cell = &self.buffer[self.width * y + x];
             if (priority >= cell.bg_priority)
@@ -101,10 +110,12 @@ fn void VirtualTerminal.fill_background(&self, int x0, int y0, int w, int h, rl:
     }
 }
 
+<*
+@require x >= 0 && x < self.width
+@require y >= 0 && y < self.height
+*>
 fn void VirtualTerminal.set_tile(&self, int x, int y, char glyph, rl::Color fg=colors::WHITE, int priority=0)
 {
-    assert(x >= 0 && x < self.width && y >= 0 && y < self.height);
-
     VCell* cell = &self.buffer[self.width * y + x];
     if (priority >= cell.fg_priority)
     {
@@ -114,16 +125,17 @@ fn void VirtualTerminal.set_tile(&self, int x, int y, char glyph, rl::Color fg=c
     }
 }
 
+<*
+@require x0 >= 0 && x0 + w < self.width
+@require y0 >= 0 && y0 + h < self.height
+@require w > 0
+@require h > 0
+*>
 fn void VirtualTerminal.fill_tile(&self, int x0, int y0, int w, int h, char glyph, rl::Color fg=colors::WHITE, int priority=0)
 {
-    int x_min = math::max(0, x0);
-    int y_min = math::max(0, y0);
-    int x_max = math::min(self.width - 1, x0 + w - 1);
-    int y_max = math::min(self.height - 1, y0 + h - 1);
-
-    for (int y = y_min; y <= y_max; y++)
+    for (int y = y0; y < y0 + h; y++)
     {
-        for (int x = x_min; x <= x_max; x++)
+        for (int x = x0; x < x0 + w; x++)
         {
             VCell* cell = &self.buffer[self.width * y + x];
             if (priority >= cell.fg_priority)
@@ -136,6 +148,12 @@ fn void VirtualTerminal.fill_tile(&self, int x0, int y0, int w, int h, char glyp
     }
 }
 
+<*
+@require x0 >= 0 && x0 + w < self.width
+@require y0 >= 0 && y0 + h < self.height
+@require w > 0
+@require h > 0
+*>
 fn void VirtualTerminal.box_tile(&self, int x0, int y0, int w, int h, bool double_lines=false, rl::Color fg=colors::WHITE, int priority=0)
 {
     int x_min = math::max(0, x0);
@@ -187,10 +205,12 @@ fn void VirtualTerminal.box_tile(&self, int x0, int y0, int w, int h, bool doubl
     }
 }
 
+<*
+@require x >= 0 && x < self.width * 2
+@require y >= 0 && y < self.height
+*>
 fn void VirtualTerminal.set_text(&self, int x, int y, char glyph, rl::Color fg=colors::WHITE, int priority=0)
 {
-    assert(x >= 0 && x < self.width * 2 && y >= 0 && y < self.height);
-
     VCell* cell = &self.buffer[self.width * y + (x / 2)];
     if (priority >= cell.fg_priority)
     {
@@ -209,6 +229,12 @@ fn void VirtualTerminal.set_text(&self, int x, int y, char glyph, rl::Color fg=c
     }
 }
 
+<*
+@require x0 >= 0 && x0 + w < self.width * 2
+@require y0 >= 0 && y0 + h < self.height
+@require w > 0
+@require h > 0
+*>
 fn void VirtualTerminal.fill_text(&self, int x0, int y0, int w, int h, char glyph, rl::Color fg=colors::WHITE, int priority=0)
 {
     int x_min = math::max(0, x0);
@@ -257,6 +283,12 @@ fn void VirtualTerminal.fill_text(&self, int x0, int y0, int w, int h, char glyp
     }
 }
 
+<*
+@require x0 >= 0 && x0 + w < self.width * 2
+@require y0 >= 0 && y0 + h < self.height
+@require w > 0
+@require h > 0
+*>
 fn void VirtualTerminal.box_text(&self, int x0, int y0, int w, int h, bool double_lines=false, rl::Color fg=colors::WHITE, int priority=0)
 {
     int x_min = math::max(0, x0);
@@ -308,6 +340,10 @@ fn void VirtualTerminal.box_text(&self, int x0, int y0, int w, int h, bool doubl
     }
 }
 
+<*
+@require x >= 0 && x < self.width * 2
+@require y >= 0 && y < self.height
+*>
 fn void VirtualTerminal.write(&self, int x, int y, String text, rl::Color fg=colors::WHITE, int priority=0)
 {
     foreach (c: text)
@@ -316,10 +352,9 @@ fn void VirtualTerminal.write(&self, int x, int y, String text, rl::Color fg=col
     }
 }
 
-
-fn void VirtualTerminal.drawTile(&self, int x, int y, char c, rl::Color col)
+fn void VirtualTerminal.drawTile(&self, int x, int y, char c, rl::Color col) @private
 {
-    rl::Rectangle src = { 
+    rl::Rectangle src = {
         (float) (c % 16) * self.font.width, (float) (c / 16) * self.font.height,
         self.font.width, self.font.height
     };
@@ -331,7 +366,7 @@ fn void VirtualTerminal.drawTile(&self, int x, int y, char c, rl::Color col)
     rl::drawTexturePro(self.font.texture, src, dest, { 0, 0 }, 0, col);
 }
 
-fn void VirtualTerminal.drawText(&self, int x, int y, char c, rl::Color col)
+fn void VirtualTerminal.drawText(&self, int x, int y, char c, rl::Color col) @private
 {
     rl::Rectangle src = { 
         (float) (c % 16) * self.hfont.width, (float) (c / 16) * self.hfont.height,
