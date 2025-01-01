@@ -11,10 +11,10 @@ interface PostLoadEvent
     fn void on_post_load() @optional;
 }
 
-macro @call_event($Type, #func, any e)
+macro @call_event($Type, #func, any e, ...)
 {
     $Type h = ($Type) e;
-    if (&h.#func) h.#func();
+    if (&h.#func) h.#func($vasplat);
 }
 
 interface Action

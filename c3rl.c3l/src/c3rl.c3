@@ -1,5 +1,7 @@
 module c3rl;
 
+import std::io;
+
 import raylib5::rl;
 
 import c3rl::internal @public;
@@ -49,6 +51,11 @@ interface RLGame
     fn void tick();
 }
 
+interface ResizeEvent
+{
+    fn void on_resize(int new_width, int new_height);
+}
+
 fn void launch(RLGame game)
 {
     //internal::waitForDebugger();
@@ -60,6 +67,7 @@ fn void launch(RLGame game)
     rl::initWindow(settings.terminal_width * settings.default_font_size, settings.terminal_height * settings.default_font_size, settings.window_title);
     rl::setTargetFPS(60);
     rl::setExitKey(0);
+    rl::setWindowState(rl::FLAG_WINDOW_RESIZABLE);
 
     set_font_directory(settings.asset_path);
 
@@ -89,12 +97,22 @@ fn void launch(RLGame game)
 
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Starting game loop...");
 
+
     @pool()
     {
         allocator::TempAllocator* temp = allocator::temp();
         while (!rl::windowShouldClose())
         {
             temp.reset(0);
+            
+            if (rl::isWindowResized())
+            {
+                int new_width = rl::getScreenWidth();
+                int new_height = rl::getScreenHeight();
+                @call_event(ResizeEvent, on_resize, terminal, new_width, new_height);
+                @call_event(ResizeEvent, on_resize, game, new_width, new_height);
+            }
+
             rl::beginDrawing();
             rl::clearBackground(colors::BLACK);
 

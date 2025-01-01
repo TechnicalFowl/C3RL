@@ -2,6 +2,7 @@ module c3rl;
 
 import std::collections::list;
 import std::collections::map;
+import std::io;
 import std::math;
 
 import raylib5::rl;
@@ -42,6 +43,16 @@ fn void VirtualTerminal.new_init(&self, int w, int h)
 fn void VirtualTerminal.free(&self)
 {
     mem::free(self.buffer);
+}
+
+fn void VirtualTerminal.on_resize(&self, int new_width, int new_height) @dynamic
+{
+    int new_term_width = new_width / self.font.width;
+    int new_term_height = new_height / self.font.height;
+    mem::free(self.buffer);
+    self.buffer = mem::new_array(VCell, (usz) new_term_width * new_term_height);
+    self.width = new_term_width;
+    self.height = new_term_height;
 }
 
 fn void VirtualTerminal.clear(&self, rl::Color bg=colors::BLACK)
