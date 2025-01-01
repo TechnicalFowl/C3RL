@@ -6,9 +6,15 @@ import std::io;
 
 import raylib5::rl;
 
-interface Event
+interface PostLoadEvent
 {
-    
+    fn void on_post_load() @optional;
+}
+
+macro @call_event($Type, #func, any e)
+{
+    $Type h = ($Type) e;
+    if (&h.#func) h.#func();
 }
 
 interface Action
@@ -36,13 +42,13 @@ fn WaitAction* do_wait(double time)
 
 struct MoveAction (Action)
 {
-    int[<2>] move;
+    IVec2 move;
 }
 fn double MoveAction.duration(&self) @dynamic => 1.0;
 
 fn void MoveAction.apply(&self, Entity entity) @dynamic
 {
-    int[<2>] new_pos = entity.get_position() + self.move;
+    IVec2 new_pos = entity.get_position() + self.move;
 
     ZoneCell* cell = entity.get_zone().get_cell(...new_pos);
     if (cell.terrain.passable)
@@ -51,7 +57,7 @@ fn void MoveAction.apply(&self, Entity entity) @dynamic
     }
 }
 
-fn MoveAction* do_move(int[<2>] move)
+fn MoveAction* do_move(IVec2 move)
 {
     MoveAction* move_action = mem::temp_alloc(MoveAction);
     move_action.move = move;
@@ -64,8 +70,8 @@ interface Entity
 
     fn Zone* get_zone();
     fn String get_name();
-    fn int[<2>] get_position();
-    fn void set_position(int[<2>] pos);
+    fn IVec2 get_position();
+    fn void set_position(IVec2 pos);
     fn char get_glyph();
     fn rl::Color get_color();
     fn double get_idle_time();
@@ -78,7 +84,7 @@ struct EntityCommon (Entity)
 {
     Zone* zone;
     String name;
-    int[<2>] position;
+    IVec2 position;
     char glyph;
     rl::Color color;
 
@@ -87,8 +93,8 @@ struct EntityCommon (Entity)
 
 fn Zone* EntityCommon.get_zone(&self) @dynamic => self.zone;
 fn String EntityCommon.get_name(&self) @dynamic => self.name;
-fn int[<2>] EntityCommon.get_position(&self) @dynamic => self.position;
-fn void EntityCommon.set_position(&self, int[<2>] pos) @dynamic
+fn IVec2 EntityCommon.get_position(&self) @dynamic => self.position;
+fn void EntityCommon.set_position(&self, IVec2 pos) @dynamic
 {
     ZoneCell* cell = self.zone.get_cell(...self.position);
     Entity this_ent;
@@ -122,7 +128,7 @@ macro @pass($Type, #func)
 }
 */
 
-fn void EntityCommon.new_init(&self, Zone* z, String n, int[<2>] p, char g, rl::Color c)
+fn void EntityCommon.new_init(&self, Zone* z, String n, IVec2 p, char g, rl::Color c)
 {
     self.zone = z;
     self.name = n;
@@ -146,7 +152,7 @@ fn Action EntityCommon.next_action(&self, double max_time) @dynamic
 
 struct Navigator
 {
-    List(<int[<2>]>) path;
+    List(<IVec2>) path;
 }
 
 fn void Navigator.new_init(&self)
@@ -160,13 +166,13 @@ fn void Navigator.free(&self)
 
 fn bool Navigator.is_idle(&self) => self.path.is_empty();
 
-fn void Navigator.path_to(&self, Zone* zone, int[<2>] start, int[<2>] end)
+fn void Navigator.path_to(&self, Zone* zone, IVec2 start, IVec2 end)
 {
     self.path.clear();
     zone.path(start, end, &self.path, diagonal_moves: false, reverse: true);
 }
 
-fn int[<2>] Navigator.next_point(&self)
+fn IVec2 Navigator.next_point(&self)
 {
     assert(!self.path.is_empty(), "No path to follow");
     return self.path.pop()!!;
@@ -175,4 +181,132 @@ fn int[<2>] Navigator.next_point(&self)
 fn void Navigator.abort(&self)
 {
     self.path.clear();
+}
+
+interface EntityVisibility
+{
+    fn VisibilityTracker* get_visibility();
+}
+
+struct VisibilityTracker
+{
+    Zone* zone;
+    int width;
+    int height;
+    ulong* visible;
+    ulong* explored;
+}
+
+fn void VisibilityTracker.new_init(&self, Zone* z)
+{
+    self.zone = z;
+    self.width = z.width;
+    self.height = z.height;
+    usz size = (((usz) self.width * self.height) - 1) / 64 + 1;
+    self.visible = mem::new_array(ulong, size);
+    self.explored = mem::new_array(ulong, size);
+}
+
+fn void VisibilityTracker.free(&self)
+{
+    mem::free(self.visible);
+    mem::free(self.explored);
+}
+
+struct VisibilityTrackerCB
+{
+    VisibilityTracker* vis;
+    int step;
+    int range;
+}
+
+fn bool VisibilityTrackerCB.line_cb(&self, IVec2 pos) @private
+{
+    self.vis.set_visible(pos, true);
+    self.vis.set_explored(pos, true);
+    return self.step++ < self.range && self.vis.zone.get_cell(...pos).terrain.passable;
+}
+
+fn void VisibilityTracker.sweep_line(&self, IVec2 from, IVec2 to)
+{
+    self.set_visible(from, true);
+    self.set_explored(from, true);
+    VisibilityTrackerCB cb_data = { self, 0, ivec2_distance(from, to) };
+    c3rl::line(from, to, (LineCallback) &VisibilityTrackerCB.line_cb, &cb_data);
+}
+
+fn void VisibilityTracker.sweep(&self, IVec2 pos, int range)
+{
+    usz size = (((usz) self.width * self.height) - 1) / 64 + 1;
+    mem::set(self.visible, 0, size * 8);
+    self.set_visible(pos, true);
+    self.set_explored(pos, true);
+    
+    VisibilityTrackerCB cb_data = { self, 0, range };
+
+    // Box sweep
+    for (int i = -range; i <= range; ++i)
+    {
+        cb_data.step = 0;
+        c3rl::line(pos, pos + {i, -range}, (LineCallback) &VisibilityTrackerCB.line_cb, &cb_data);
+        cb_data.step = 0;
+        c3rl::line(pos, pos + {i, range}, (LineCallback) &VisibilityTrackerCB.line_cb, &cb_data);
+        cb_data.step = 0;
+        c3rl::line(pos, pos + {-range, i}, (LineCallback) &VisibilityTrackerCB.line_cb, &cb_data);
+        cb_data.step = 0;
+        c3rl::line(pos, pos + {range, i}, (LineCallback) &VisibilityTrackerCB.line_cb, &cb_data);
+    }
+}
+
+fn void VisibilityTracker.clear(&self)
+{
+    usz size = (((usz) self.width * self.height) - 1) / 64 + 1;
+    mem::set(self.visible, 0, size * 8);
+    mem::set(self.explored, 0, size * 8);
+}
+
+fn bool VisibilityTracker.is_visible(&self, IVec2 pos)
+{
+    assert(pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height, "Out of bounds [%d %d] outside [%d x %d] area", pos[0], pos[1], self.width, self.height);
+    int index = (pos[0] + pos[1] * self.width);
+    int bit = index % 64;
+    return (self.visible[index / 64] & (1u64 << bit)) != 0;
+}
+
+fn bool VisibilityTracker.is_explored(&self, IVec2 pos)
+{
+    assert(pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height, "Out of bounds [%d %d] outside [%d x %d] area", pos[0], pos[1], self.width, self.height);
+    int index = (pos[0] + pos[1] * self.width);
+    int bit = index % 64;
+    return (self.explored[index / 64] & (1u64 << bit)) != 0;
+}
+
+fn void VisibilityTracker.set_visible(&self, IVec2 pos, bool visible)
+{
+    assert(pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height, "Out of bounds [%d %d] outside [%d x %d] area", pos[0], pos[1], self.width, self.height);
+    int index = (pos[0] + pos[1] * self.width);
+    int bit = index % 64;
+    if (visible)
+    {
+        self.visible[index / 64] |= 1u64 << bit;
+    }
+    else
+    {
+        self.visible[index / 64] &= ~(1u64 << bit);
+    }
+}
+
+fn void VisibilityTracker.set_explored(&self, IVec2 pos, bool visible)
+{
+    assert(pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height, "Out of bounds [%d %d] outside [%d x %d] area", pos[0], pos[1], self.width, self.height);
+    int index = (pos[0] + pos[1] * self.width);
+    int bit = index % 64;
+    if (visible)
+    {
+        self.explored[index / 64] |= 1u64 << bit;
+    }
+    else
+    {
+        self.explored[index / 64] &= ~(1u64 << bit);
+    }
 }

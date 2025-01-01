@@ -52,6 +52,12 @@ fn void Zone.new_init(&self, ZoneDescription desc)
     desc.generator(desc.generator_data, self);
 
     assert(self.player != null, "No player provided");
+
+    @call_event(PostLoadEvent, on_post_load, self.player);
+    foreach (ent: self.all_entities)
+    {
+        @call_event(PostLoadEvent, on_post_load, ent);
+    }
 }
 
 fn void Zone.free(&self)
@@ -154,13 +160,13 @@ fn void Zone.add_entity(&self, Entity e)
     cell.entities.push(e);
 }
 
-fn int[<2>] Zone.get_player_position(&self)
+fn IVec2 Zone.get_player_position(&self)
 {
     assert(self.player != null, "No player in zone");
     return self.player.get_position();
 }
 
-fn int[<2>] Zone.get_mouse_position(&self)
+fn IVec2 Zone.get_mouse_position(&self)
 {
     int hw = terminal.width / 2;
     int hh = terminal.height / 2;
@@ -199,6 +205,13 @@ fn void Zone.render(&self, VirtualTerminal* term)
     int min_y = focus_y - hh;
     int min_x = focus_x - hw;
 
+    VisibilityTracker* vis = null;
+    EntityVisibility ev = (EntityVisibility) self.player;
+    if (&ev.get_visibility)
+    {
+        vis = ev.get_visibility();
+    }
+
     for (int y = focus_y - hh; y < focus_y + hh; ++y)
     {
         if (y < 0 || y >= self.height) continue;
@@ -206,13 +219,16 @@ fn void Zone.render(&self, VirtualTerminal* term)
         for (int x = focus_x - hw; x < focus_x + hw; ++x)
         {
             if (x < 0 || x >= self.width) continue;
+            bool is_explored = vis == null || vis.is_explored({x, y});
+            if (!is_explored) continue;
             int term_x = x - min_x;
             ZoneCell* cell = &self.cells[x + y * self.width];
             ZoneTerrain terr = cell.terrain;
-            term.set_background(term_x, term_y, terr.bg);
-            if (cell.entities.is_empty())
+            bool is_visible = vis == null || vis.is_visible({x, y});
+            term.set_background(term_x, term_y, is_visible ? terr.bg : terr.bg.grayscale().darken(0.4f));
+            if (cell.entities.is_empty() || !is_visible)
             {
-                term.set_tile(term_x, term_y, terr.glyph, terr.fg);
+                term.set_tile(term_x, term_y, terr.glyph, is_visible ? terr.fg : terr.fg.grayscale().darken(0.4f));
             }
             else
             {
@@ -223,39 +239,39 @@ fn void Zone.render(&self, VirtualTerminal* term)
     }
 }
 
-fn double get_diag_heuristic(int[<2>] a, int[<2>] b)
+fn double get_diag_heuristic(IVec2 a, IVec2 b)
 {
     int dx = math::abs(a[0] - b[0]);
     int dy = math::abs(a[1] - b[1]);
     return (double) (dx + dy) + (-0.58578643762) * math::min(dx, dy);
 }
 
-fn double get_heuristic(int[<2>] a, int[<2>] b)
+fn double get_heuristic(IVec2 a, IVec2 b)
 {
     int dx = math::abs(a[0] - b[0]);
     int dy = math::abs(a[1] - b[1]);
     return (double) (dx + dy);
 }
 
-fn uint int[<2>].hash(self) => ((uint) self[0]) * 2654435761u + ((uint) self[1]);
+fn uint IVec2.hash(self) => ((uint) self[0]) * 2654435761u + ((uint) self[1]);
 
 struct AStarStep
 {
-    int[<2>] pos;
-    int[<2>] last;
+    IVec2 pos;
+    IVec2 last;
     double cost;
 }
 
 fn bool AStarStep.less(AStarStep* a, AStarStep b) => a.cost < b.cost;
 
-const int[<2>][4] DIRECT_NEIGHBORS = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
-const int[<2>][4] DIAGONAL_NEIGHBORS = { {-1, -1}, {1, -1}, {-1, 1}, {1, 1} };
+const IVec2[4] DIRECT_NEIGHBORS = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
+const IVec2[4] DIAGONAL_NEIGHBORS = { {-1, -1}, {1, -1}, {-1, 1}, {1, 1} };
 
-fn bool Zone.path(&self, int[<2>] from, int[<2>] to, List(<int[<2>]>)* results, bool diagonal_moves=true, bool reverse=false)
+fn bool Zone.path(&self, IVec2 from, IVec2 to, List(<IVec2>)* results, bool diagonal_moves=true, bool reverse=false)
 {
     PriorityQueue(<AStarStep>) frontier;
     frontier.temp_init(16);
-    HashMap(<int[<2>], AStarStep>) came_from;
+    HashMap(<IVec2, AStarStep>) came_from;
     came_from.temp_init(16);
 
     frontier.push({from, from, 0});
@@ -270,7 +286,7 @@ fn bool Zone.path(&self, int[<2>] from, int[<2>] to, List(<int[<2>]>)* results, 
         
         foreach (n: DIRECT_NEIGHBORS)
         {
-            int[<2>] next = current.pos + n;
+            IVec2 next = current.pos + n;
             if (next[0] < 0 || next[0] >= self.width || next[1] < 0 || next[1] >= self.height) continue;
             ZoneCell* cell = self.get_cell(...next);
             if (!cell.terrain.passable) continue;
@@ -288,7 +304,7 @@ fn bool Zone.path(&self, int[<2>] from, int[<2>] to, List(<int[<2>]>)* results, 
         {
             foreach (n: DIAGONAL_NEIGHBORS)
             {
-                int[<2>] next = current.pos + n;
+                IVec2 next = current.pos + n;
                 if (next[0] < 0 || next[0] >= self.width || next[1] < 0 || next[1] >= self.height) continue;
                 ZoneCell* cell = self.get_cell(...next);
                 if (!cell.terrain.passable) continue;
@@ -307,7 +323,7 @@ fn bool Zone.path(&self, int[<2>] from, int[<2>] to, List(<int[<2>]>)* results, 
 
     if (!came_from.has_key(to)) return false;
 
-    int[<2>] step_back = to;
+    IVec2 step_back = to;
 
     results.clear();
     while (step_back != from)
@@ -334,8 +350,6 @@ struct ZoneDescription
     int width;
     int height;
 
-    int[<2>] player_spawn;
-
     ZoneGenerator generator;
     void* generator_data;
 }
@@ -353,52 +367,27 @@ fn void load_zone(ZoneDescription desc)
     zone.new_init(desc);
 }
 
-def LineCallback = fn void(void* data, int[<2>] next);
-fn void line(int[<2>] start, int[<2>] end, LineCallback callback, void* data=null)
+def LineCallback = fn bool(void* data, IVec2 next);
+fn void line(IVec2 start, IVec2 end, LineCallback callback, void* data=null)
 {
-    int x0 = start[0];
-    int y0 = start[1];
-    int x1 = end[0];
-    int y1 = end[1];
+    if (start == end) return;
 
-    int dx = x1 - x0;
-    int dy = y1 - y0;
+    IVec2 delta = math::abs(end - start);
+    IVec2 step = ivec2_sign(end - start);
 
-    int sx = 1;
-    int sy = 1;
+    int err = delta[0] - delta[1];
 
-    if (dx < 0)
+    do
     {
-        dx = -dx;
-        sx = -1;
-    }
-
-    if (dy < 0)
-    {
-        dy = -dy;
-        sy = -1;
-    }
-
-    int err = dx - dy;
-
-    while (true)
-    {
-        callback(data, {x0, y0});
-
-        if (x0 == x1 && y0 == y1) break;
-
-        int e2 = 2 * err;
-
-        if (e2 > -dy)
+        if (2 * err > -delta[1])
         {
-            err -= dy;
-            x0 += sx;
+            err -= delta[1];
+            start[0] += step[0];
         }
-
-        if (e2 < dx)
+        else if (2 * err < delta[0])
         {
-            err += dx;
-            y0 += sy;
+            err += delta[0];
+            start[1] += step[1];
         }
-    }
+    } while (callback(data, start) && start != end);
 }

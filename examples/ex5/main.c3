@@ -23,14 +23,14 @@ struct Player (Entity)
 // @Todo: There should be an easy way to avoid this boilerplate?...
 fn Zone* Player.get_zone(&self) @dynamic => self.entity.get_zone();
 fn String Player.get_name(&self) @dynamic => self.entity.get_name();
-fn int[<2>] Player.get_position(&self) @dynamic => self.entity.get_position();
-fn void Player.set_position(&self, int[<2>] pos) @dynamic => self.entity.set_position(pos);
+fn IVec2 Player.get_position(&self) @dynamic => self.entity.get_position();
+fn void Player.set_position(&self, IVec2 pos) @dynamic => self.entity.set_position(pos);
 fn char Player.get_glyph(&self) @dynamic => self.entity.get_glyph();
 fn rl::Color Player.get_color(&self) @dynamic => self.entity.get_color();
 fn double Player.get_idle_time(&self) @dynamic => self.entity.get_idle_time();
 fn void Player.give_idle_time(&self, double time) @dynamic => self.entity.give_idle_time(time);
 
-fn void Player.new_init(&self, Zone* z, String n, int[<2>] p)
+fn void Player.new_init(&self, Zone* z, String n, IVec2 p)
 {
     self.entity.new_init(z, n, p, '@', colors::WHITE);
     self.nav.new_init();
@@ -58,7 +58,7 @@ fn Action Player.next_action(&self, double max_time) @dynamic
         if (self.nav_delay <= 0)
         {
             self.nav_delay = 0.2f;
-            int[<2>] next_move = self.nav.next_point() - self.entity.position;
+            IVec2 next_move = self.nav.next_point() - self.entity.position;
             assert(math::abs(next_move[0]) + math::abs(next_move[1]) == 1, "Invalid move from navigator");
             return c3rl::do_move(next_move);
         }
@@ -117,13 +117,13 @@ fn RLSettings Ex5.settings(&self) @dynamic
 fn void Ex5.tick(&self) @dynamic
 {
     Player* pl = (Player*) c3rl::zone.player;
-    int[<2>] player_pos = pl.get_position();
-    int[<2>] zone_min = player_pos - {c3rl::terminal.width / 2, c3rl::terminal.height / 2};
+    IVec2 player_pos = pl.get_position();
+    IVec2 zone_min = player_pos - {c3rl::terminal.width / 2, c3rl::terminal.height / 2};
     if (!pl.nav.is_idle())
     {
         foreach(point: pl.nav.path)
         {
-            int[<2>] term_pos = point - zone_min;
+            IVec2 term_pos = point - zone_min;
             if (term_pos[0] >= 0 && term_pos[0] < c3rl::terminal.width && term_pos[1] >= 0 && term_pos[1] < c3rl::terminal.height)
             {
                 c3rl::terminal.set_background(...term_pos, colors::DARK_GREEN, 5);
@@ -137,8 +137,14 @@ fn void Ex5.tick(&self) @dynamic
     }
     else
     {
-        int[<2>] mouse = { rl::getMouseX() / 16, rl::getMouseY() / 16 };
-        int[<2>] mouse_in_zone = c3rl::zone.get_mouse_position();
+        IVec2 mouse = { rl::getMouseX() / 16, rl::getMouseY() / 16 };
+        IVec2 mouse_in_zone = c3rl::zone.get_mouse_position();
+        if (rl::isMouseButtonPressed(rl::MouseButton.LEFT))
+        {
+            pl.nav.path_to(c3rl::zone, player_pos, mouse_in_zone);
+        }
+
+        // Debug drawing for the mosue and perspective path.
         if (mouse[0] >= 0 && mouse[0] < c3rl::terminal.width && mouse[1] >= 0 && mouse[1] < c3rl::terminal.height)
         {
             if (mouse_in_zone[0] < 0 || mouse_in_zone[0] >= c3rl::zone.width || mouse_in_zone[1] < 0 || mouse_in_zone[1] >= c3rl::zone.height)
@@ -152,13 +158,13 @@ fn void Ex5.tick(&self) @dynamic
                 {
                     if (pl.nav.is_idle())
                     {
-                        List(<int[<2>]>) path;
+                        List(<IVec2>) path;
                         path.temp_init();
                         if (c3rl::zone.path(player_pos, mouse_in_zone, &path, false))
                         {
                             foreach(point: path)
                             {
-                                int[<2>] term_pos = point - zone_min;
+                                IVec2 term_pos = point - zone_min;
                                 if (term_pos[0] >= 0 && term_pos[0] < c3rl::terminal.width && term_pos[1] >= 0 && term_pos[1] < c3rl::terminal.height)
                                 {
                                     c3rl::terminal.set_background(...term_pos, colors::DARK_RED, 5);
@@ -169,11 +175,6 @@ fn void Ex5.tick(&self) @dynamic
                         else
                         {
                             c3rl::terminal.set_tile(...mouse, 'x', colors::RED, 10);
-                        }
-
-                        if (rl::isMouseButtonPressed(rl::MouseButton.LEFT))
-                        {
-                            pl.nav.path_to(c3rl::zone, player_pos, mouse_in_zone);
                         }
                     }
                 }

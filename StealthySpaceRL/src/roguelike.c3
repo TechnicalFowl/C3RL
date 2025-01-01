@@ -61,10 +61,10 @@ fn Action makeWaitAction(int time)
 struct MoveAction (Action)
 {
     int time;
-    int[<2>] dir;
+    IVec2 dir;
 }
 fn int MoveAction.getTimeCost(&self) @dynamic => self.time;
-fn Action makeMoveAction(int time, int[<2>] dir)
+fn Action makeMoveAction(int time, IVec2 dir)
 {
     MoveAction* a = mem::new(MoveAction);
     a.time = time;
@@ -80,7 +80,7 @@ struct Appearance
 
 interface Actor
 {
-    fn int[<2>] position();
+    fn IVec2 position();
     fn Appearance getAppearance();
     fn Action update(Map* map, int max_time);
     fn void apply(Map* map, Action action);
@@ -88,15 +88,15 @@ interface Actor
 
 struct Player (Actor)
 {
-    int[<2>] pos;
+    IVec2 pos;
 }
 
-fn void Player.new_init(&self, int[<2>] p)
+fn void Player.new_init(&self, IVec2 p)
 {
     self.pos = p;
 }
 
-fn int[<2>] Player.position(&self) @dynamic => self.pos;
+fn IVec2 Player.position(&self) @dynamic => self.pos;
 
 fn bool Player.hasInput(&self)
 {
@@ -142,7 +142,7 @@ fn void Player.apply(&self, Map* map, Action action) @dynamic
             break;
         case MoveAction.typeid:
             MoveAction* move = (MoveAction*) action;
-            int[<2>] new_pos = { self.pos[0] + move.dir[0], self.pos[1] + move.dir[1] };
+            IVec2 new_pos = { self.pos[0] + move.dir[0], self.pos[1] + move.dir[1] };
             if (new_pos[0] >= 0 && new_pos[0] < map.width && new_pos[1] >= 0 && new_pos[1] < map.height)
             {
                 Tile* tile = map.getTile(new_pos[0], new_pos[1])!!;
@@ -300,15 +300,15 @@ fn Tile*! Map.getTile(&self, int x, int y)
 
 fn void Map.render(&self, TextBuffer* buffer)
 {
-    int[<2>] player_pos = self.player.position();
-    int[<2>] min_pos = { player_pos[0] - buffer.width / 2, player_pos[1] - buffer.height / 2 };
-    int[<2>] max_pos = { min_pos[0] + buffer.width - 1, min_pos[1] + buffer.height -1 };
+    IVec2 player_pos = self.player.position();
+    IVec2 min_pos = { player_pos[0] - buffer.width / 2, player_pos[1] - buffer.height / 2 };
+    IVec2 max_pos = { min_pos[0] + buffer.width - 1, min_pos[1] + buffer.height -1 };
 
     for (int y = math::max(0, min_pos[1]); y < math::min(self.height, max_pos[1]); y++)
     {
         for (int x = math::max(0, min_pos[0]); x < math::min(self.width, max_pos[0]); x++)
         {
-            int[<2>] screen_pos = { x - min_pos[0], y - min_pos[1] };
+            IVec2 screen_pos = { x - min_pos[0], y - min_pos[1] };
             Tile* tile = self.getTile(x, y)!!;
             buffer.set(screen_pos, tile.bg_tile, tile.bg_color, rl::BLACK);
             foreach(&obj: tile.objects)
@@ -321,8 +321,8 @@ fn void Map.render(&self, TextBuffer* buffer)
 
     foreach (&actor: self.actors)
     {
-        int[<2>] pos = actor.position();
-        int[<2>] screen_pos = { pos[0] - min_pos[0], pos[1] - min_pos[1] };
+        IVec2 pos = actor.position();
+        IVec2 screen_pos = { pos[0] - min_pos[0], pos[1] - min_pos[1] };
         if (screen_pos[0] >= 0 && screen_pos[0] < buffer.width && screen_pos[1] >= 0 && screen_pos[1] < buffer.height)
         {
             Appearance app = actor.getAppearance();
@@ -330,8 +330,8 @@ fn void Map.render(&self, TextBuffer* buffer)
         }
     }
     {
-        int[<2>] pos = self.player.position();
-        int[<2>] screen_pos = { pos[0] - min_pos[0], pos[1] - min_pos[1] };
+        IVec2 pos = self.player.position();
+        IVec2 screen_pos = { pos[0] - min_pos[0], pos[1] - min_pos[1] };
         if (screen_pos[0] >= 0 && screen_pos[0] < buffer.width && screen_pos[1] >= 0 && screen_pos[1] < buffer.height)
         {
             Appearance app =  self.player.getAppearance();
@@ -359,7 +359,7 @@ fn void TextBuffer.clear(&self)
     }
 }
 
-fn void TextBuffer.write(&self, String text, int[<2>] pos, rl::Color color)
+fn void TextBuffer.write(&self, String text, IVec2 pos, rl::Color color)
 {
     int tile_x = pos[0] / 2;
     int sub_x = pos[0] % 2;
@@ -384,7 +384,7 @@ fn void TextBuffer.write(&self, String text, int[<2>] pos, rl::Color color)
     }
 }
 
-fn void TextBuffer.set(&self, int[<2>] pos, char icon, rl::Color fg, rl::Color bg)
+fn void TextBuffer.set(&self, IVec2 pos, char icon, rl::Color fg, rl::Color bg)
 {
     if (pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height)
     {
@@ -437,7 +437,7 @@ fn bool update()
     g_internal.current_state.update(g_internal.current_map);
     g_internal.current_map.update();
 
-    int[<2>] player_pos = g_internal.current_map.player.position();
+    IVec2 player_pos = g_internal.current_map.player.position();
     g_internal.buffer.write(string::tformat("T%.1f  @ <%d %d>", g_internal.current_map.elapsed_time / 100.0f, player_pos[0], player_pos[1]), { 0, 0 }, rl::WHITE);
     g_internal.current_map.render(&g_internal.buffer);
 

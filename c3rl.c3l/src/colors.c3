@@ -128,9 +128,30 @@ fn Color Color.grayscale(&self)
     return { gray, gray, gray, self.a };
 }
 
+fn Color Color.darken(&self, float pct)
+{
+    return {
+        (char) math::clamp(math::floor(self.r * (1.0f - pct)), 0, 255),
+        (char) math::clamp(math::floor(self.g * (1.0f - pct)), 0, 255),
+        (char) math::clamp(math::floor(self.b * (1.0f - pct)), 0, 255),
+        self.a
+    };
+}
+
 module c3rl::colors;
 
+import std::math::random;
 import raylib5::rl;
+
+fn Color random_color(Random rng)
+{
+    return {
+        (char) random::next_in_range(rng, 0, 255),
+        (char) random::next_in_range(rng, 0, 255),
+        (char) random::next_in_range(rng, 0, 255),
+        255
+    };
+}
 
 const Color BLANK = {0, 0, 0, 0};
 const Color ALICE_BLUE = {240, 248, 255, 255};

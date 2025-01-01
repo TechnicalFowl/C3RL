@@ -21,14 +21,14 @@ struct Player (Entity)
 fn void Player.free(&self) @dynamic => self.entity.free();
 fn Zone* Player.get_zone(&self) @dynamic => self.entity.get_zone();
 fn String Player.get_name(&self) @dynamic => self.entity.get_name();
-fn int[<2>] Player.get_position(&self) @dynamic => self.entity.get_position();
-fn void Player.set_position(&self, int[<2>] pos) @dynamic => self.entity.set_position(pos);
+fn IVec2 Player.get_position(&self) @dynamic => self.entity.get_position();
+fn void Player.set_position(&self, IVec2 pos) @dynamic => self.entity.set_position(pos);
 fn char Player.get_glyph(&self) @dynamic => self.entity.get_glyph();
 fn rl::Color Player.get_color(&self) @dynamic => self.entity.get_color();
 fn double Player.get_idle_time(&self) @dynamic => self.entity.get_idle_time();
 fn void Player.give_idle_time(&self, double time) @dynamic => self.entity.give_idle_time(time);
 
-fn void Player.new_init(&self, Zone* z, String n, int[<2>] p)
+fn void Player.new_init(&self, Zone* z, String n, IVec2 p)
 {
     self.entity.new_init(z, n, p, '@', colors::WHITE);
 }

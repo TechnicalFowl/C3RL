@@ -15,7 +15,7 @@ struct Ex3 (RLGame)
     int destination_x;
     int destination_y;
 
-    List(<int[<2>]>) path;
+    List(<IVec2>) path;
 
     double tick_duration;
     double tick_time;
@@ -34,9 +34,10 @@ fn RLSettings Ex3.settings(&self) @dynamic
     );
 }
 
-fn void Ex3.add_to_path(&self, int[<2>] point)
+fn bool Ex3.add_to_path(&self, IVec2 point)
 {
     self.path.push(point);
+    return true;
 }
 
 // Tick is called every frame.
@@ -57,7 +58,7 @@ fn void Ex3.tick(&self) @dynamic
         }
         else
         {
-            int[<2>] next = self.path.pop_first()!!;
+            IVec2 next = self.path.pop_first()!!;
             self.player_x = next[0];
             self.player_y = next[1];
         }
