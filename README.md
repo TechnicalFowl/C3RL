@@ -1,3 +1,5 @@
+![header](https://github.com/TechnicalFowl/C3RL/blob/master/header.PNG?raw=true)
+
 A library for making traditional roguelikes witten in [C3](https://c3-lang.org). Still very much a work in progress.
 
 Features

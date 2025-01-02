@@ -8,11 +8,9 @@ import raylib5::rl;
 
 import c3rl;
 
-struct Ex6 (RLGame)
+struct ExLogo (RLGame)
 {
     random::Pcg32Random rng;
-
-    bool show_visibility;
 }
 
 struct Player (Entity)
@@ -82,40 +80,91 @@ fn Action Player.next_action(&self, double max_time) @dynamic
     return null;
 }
 
-fn void Ex6.zone_generator(&self, Zone* zone)
+fn void ExLogo.zone_generator(&self, Zone* zone)
 {
-    for (int y = 0; y < zone.height; ++y)
+    CellularAutomata gen;
+    gen.new_init(5, 0.45, 5, 2);
+
+    gen.generate(zone, &self.rng);
+
+    ulong[*] letters = {
+        0b0000000000000000000000000000000000000000000000000000000000000000,
+        0b0000000111100000111100001111110000111100000000000000000000000000,
+        0b0000001100110001100110000110011000011000000000000000000000000000,
+        0b0000011000000000000110000110011000011000000000000000000000000000,
+        0b0000011000000000011100000111110000011000000000000000000000000000,
+        0b0000011000000000000110000111100000011000100000000000000000000000,
+        0b0000001100110001100110000110110000011001100000000000000000000000,
+        0b0000000111100000111100001110011000111111100000000000000000000000,
+        0b0000000000000000000000000000000000000000000000000000000000000000,
+    };
+    BitBoard temp = {
+        64, 9,
+        &letters
+    };
+
+    ulong[*] mask = {
+        0b1111110000000000000000000000000000000000000111111111111111111111,
+        0b1111000000000000000000000000000000000000000000111111111111111111,
+        0b1100000000000000000000000000000000000000000000001111111111111111,
+        0b1100000000000000000000000000000000000000000000001111111111111111,
+        0b1100000000000000000000000000000000000000000000001111111111111111,
+        0b1100000000000000000000000000000000000000000000001111111111111111,
+        0b1100000000000000000000000000000000000000000000001111111111111111,
+        0b1111000000000000000000000000000000000000000000111111111111111111,
+        0b1111111000000000000000000000000000000000000111111111111111111111,
+    };
+    BitBoard temp2 = {
+        64, 9,
+        &mask
+    };
+
+    for (int x = 18; x < 18 + 64; ++x)
     {
-        for (int x = 0; x < zone.width; ++x)
+        for (int y = 41; y < 50; ++y)
         {
-            if (x == 10 && y == 10) continue;
-            if (x == 0 || x == zone.width - 1 || y == 0 || y == zone.height - 1 || random::next_in_range(&self.rng, 0, 5) == 0)
+            if (!temp2.get({63 - (x - 18), y - 41}))
             {
-                zone.set_terrain(x, y, '#', colors::random_color(&self.rng), colors::BLACK, false);
-            }
-            else
-            {
-                zone.set_terrain(x, y, '.', colors::WHITE, colors::BLACK, true);
+                if (temp.get({63 - (x - 18), y - 41}))
+                {
+                    zone.set_terrain(x, y, '#', x < 40 ? colors::CORNFLOWER_BLUE : colors::INDIAN_RED, colors::BLACK, false);
+                }
+                else
+                {
+                    zone.set_terrain(x, y, '.', colors::DARKEST_GREY.randomize(&self.rng, 0.2), colors::BLACK, true);
+                }
             }
         }
     }
 
     Player* pl = mem::new(Player);
-    pl.new_init(zone, "Player", {40, 10});
+    pl.new_init(zone, "Player", zone.find_nearest_empty({25, 50}));
+
+    for (int x = 18; x < 18 + 64; ++x)
+    {
+        for (int y = 41; y < 50; ++y)
+        {
+            if (!temp2.get({63 - (x - 18), y - 41}))
+            {
+                pl.vis.set_explored({x, y}, true);
+            }
+        }
+    }
+
     zone.add_player(pl);
 }
 
-fn ZoneDescription Ex6.make_zone(&self)
+fn ZoneDescription ExLogo.make_zone(&self)
 {
     ZoneDescription zone;
-    zone.new_init("main", 80, 45);
-    zone.generator = (ZoneGenerator) &Ex6.zone_generator;
+    zone.new_init("main", 100, 100);
+    zone.generator = (ZoneGenerator) &ExLogo.zone_generator;
     zone.generator_data = self;
     return zone;
 }
 
 // This is the settings for the game. We're using the default font, 16x16 characters, and a 80x45 terminal.
-fn RLSettings Ex6.settings(&self) @dynamic
+fn RLSettings ExLogo.settings(&self) @dynamic
 {
     return c3rl::make_settings(
         asset_path: "../../assets",
@@ -123,16 +172,25 @@ fn RLSettings Ex6.settings(&self) @dynamic
         default_font_size: 16,
         terminal_width: 80,
         terminal_height: 45,
-        window_title: "C3RL Example 6",
+        window_title: "C3RL",
         initial_zone: self.make_zone()
     );
 }
 
 // Render is called every frame.
-fn void Ex6.render(&self) @dynamic
+fn void ExLogo.render(&self) @dynamic
 {
     Player* pl = (Player*) c3rl::zone.player;
-    if (rl::isMouseButtonPressed(rl::MouseButton.LEFT))
+    
+    for (int x = 18; x < 18 + 50; ++x)
+    {
+        for (int y = 41; y < 50; ++y)
+        {
+            pl.vis.set_visible({x, y}, true);
+        }
+    }
+    
+    if (rl::isMouseButtonPressed(rl::MouseButton.LEFT) && !gui::want_mouse_input())
     {
         if (pl.nav.is_idle())
         {
@@ -144,43 +202,11 @@ fn void Ex6.render(&self) @dynamic
             pl.nav.abort();
         }
     }
-    if (rl::isKeyPressed(rl::KEY_SPACE))
-    {
-        pl.vis.clear();
-        pl.vis.sweep(pl.get_position(), 10);
-    }
-    if (rl::isKeyPressed(rl::KEY_F1))
-    {
-        self.show_visibility = !self.show_visibility;
-    }
-
-    // Visibility debugging
-    if (self.show_visibility)
-    {
-        IVec2 player_pos = pl.get_position();
-        IVec2 zone_min = player_pos - {c3rl::terminal.width / 2, c3rl::terminal.height / 2};
-
-        for (int y = 0; y < c3rl::terminal.height; ++y)
-        {
-            for (int x = 0; x < c3rl::terminal.width; ++x)
-            {
-                IVec2 term_pos = {x, y} + zone_min;
-                if (term_pos[0] < 0 || term_pos[0] >= c3rl::zone.width || term_pos[1] < 0 || term_pos[1] >= c3rl::zone.height) continue;
-                if (pl.vis.is_visible(term_pos))
-                {
-                    c3rl::terminal.set_background(x, y, colors::DARK_GREEN, 5);
-                } else if (pl.vis.is_explored(term_pos))
-                {
-                    c3rl::terminal.set_background(x, y, colors::DARK_RED, 5);
-                }
-            }
-        }
-    }
 }
 
 fn void main()
 {
-    Ex6 game;
+    ExLogo game;
     random::seed_entropy(&game.rng);
 
     c3rl::launch(&game);

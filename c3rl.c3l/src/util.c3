@@ -41,7 +41,7 @@ fn void BitBoard.free(&self)
 
 fn void BitBoard.clear(&self)
 {
-    mem::set(self.data, 0, ((self.width * self.height) - 1) / 64 + 1);
+    mem::set(self.data, 0, (((self.width * self.height) - 1) / 64 + 1) * 8);
 }
 
 <*
