@@ -2,6 +2,7 @@ module c3rl::gui;
 
 import std::collections::list;
 import std::collections::map;
+import std::io;
 
 import raylib5::rl;
 
@@ -172,8 +173,17 @@ fn void end_window()
     if (catch gui_data.window_stack.pop()) unreachable("No window to end");
 }
 
+fn bool want_mouse_input()
+{
+    int x = rl::getMouseX() / c3rl::settings.default_font_size;
+    int y = rl::getMouseY() / c3rl::settings.default_font_size;
+    return is_in_window({x, y});
+}
+
 fn bool is_in_window(IVec2 pos)
 {
+    if (gui_data.had_topbar && pos[1] == 0) return true;
+    if (gui_data.had_statusbar && pos[1] == c3rl::terminal.height - 1) return true;
     gui_data.windows.@each(; String key, GuiWindow* window)
     {
         if (window.last_frame >= gui_data.frame_index - 1 &&
@@ -243,7 +253,9 @@ struct GuiData
     HashMap(<String, GuiWindow*>) windows;
 
     String topbar;
+    bool had_topbar;
     String statusbar;
+    bool had_statusbar;
 
     HashMap(<GuiColor, rl::Color>) colors;
     List(<GuiColorStore>) color_stack;
@@ -290,10 +302,20 @@ fn void GuiData.render(&self)
     {
         c3rl::terminal.fill_background(0, 0, term_width, 1, get_color(GuiColor.TOP_BAR_BG), prio);
         c3rl::terminal.write(1, 0, self.topbar, get_color(GuiColor.TOP_BAR_TEXT), prio);
+        gui_data.had_topbar = true;
+    }
+    else
+    {
+        gui_data.had_topbar = false;
     }
     if (self.statusbar.len != 0)
     {
         c3rl::terminal.fill_background(0, term_height - 1, term_width, 1, get_color(GuiColor.BOTTOM_BAR_BG), prio);
         c3rl::terminal.write(1, term_height - 1, self.statusbar, get_color(GuiColor.BOTTOM_BAR_TEXT), prio);
+        gui_data.had_statusbar = true;
+    }
+    else
+    {
+        gui_data.had_statusbar = false;
     }
 }

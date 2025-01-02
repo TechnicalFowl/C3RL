@@ -124,7 +124,7 @@ fn ZoneRenderSettings Ex7.pre_render(&self) @dynamic
 fn void Ex7.render(&self) @dynamic
 {
     Player* pl = (Player*) c3rl::zone.player;
-    if (rl::isMouseButtonPressed(rl::MouseButton.LEFT))
+    if (rl::isMouseButtonPressed(rl::MouseButton.LEFT) && !gui::want_mouse_input())
     {
         if (pl.nav.is_idle())
         {
