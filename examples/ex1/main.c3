@@ -20,8 +20,8 @@ fn RLSettings Ex1.settings(&self) @dynamic
     );
 }
 
-// Tick is called every frame.
-fn void Ex1.tick(&self) @dynamic
+// Render is called every frame.
+fn void Ex1.render(&self) @dynamic
 {
     c3rl::terminal.clear(colors::BLACK);
     c3rl::terminal.write(1, 1, "Hello World", colors::WHITE);

@@ -40,8 +40,8 @@ fn bool Ex3.add_to_path(&self, IVec2 point)
     return true;
 }
 
-// Tick is called every frame.
-fn void Ex3.tick(&self) @dynamic
+// Render is called every frame.
+fn void Ex3.render(&self) @dynamic
 {
     self.tick_time += 1 / 60.0;
     if (self.tick_time > self.tick_duration)

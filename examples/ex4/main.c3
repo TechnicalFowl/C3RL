@@ -101,7 +101,7 @@ fn RLSettings Ex4.settings(&self) @dynamic
     );
 }
 
-// Tick is called every frame.
+// Render is called every frame.
 fn void Ex4.tick(&self) @dynamic
 {
 }

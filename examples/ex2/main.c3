@@ -28,8 +28,8 @@ fn RLSettings Ex2.settings(&self) @dynamic
     );
 }
 
-// Tick is called every frame.
-fn void Ex2.tick(&self) @dynamic
+// Render is called every frame.
+fn void Ex2.render(&self) @dynamic
 {
     self.tick_time += 1 / 60.0;
     if (self.tick_time > self.tick_duration)

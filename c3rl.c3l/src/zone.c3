@@ -33,6 +33,8 @@ struct Zone
 
     Entity player;
     List(<Entity>) all_entities;
+
+    IVec2 last_render_min;
 }
 
 <*
@@ -98,7 +100,7 @@ fn EntityAction* make_entity_action(Entity e, Action act, double duration, doubl
     return ea;
 }
 
-fn void Zone.update(&self)
+fn void Zone.update(&self, RLGame game)
 {
     @pool()
     {
@@ -130,6 +132,8 @@ fn void Zone.update(&self)
                 actions.push(make_entity_action(next.entity, continuation, next.duration + cont_duraction, next.remaining_time - cont_duraction));
             }
         }
+
+        if (&game.update) game.update(max_time);
     };
 }
 
@@ -179,39 +183,30 @@ fn IVec2 Zone.get_player_position(&self)
 
 fn IVec2 Zone.get_mouse_position(&self)
 {
-    int min_x = 0;
-    int min_y = 0;
-
-    if (self.player)
-    {
-        min_x = self.player.get_position()[0] - terminal.width / 2;
-        min_y = self.player.get_position()[1] - terminal.height / 2;
-    }
-
-    int x = min_x + rl::getMouseX() / settings.default_font_size;
-    int y = min_y + rl::getMouseY() / settings.default_font_size;
+    int x = self.last_render_min[0] + rl::getMouseX() / settings.default_font_size;
+    int y = self.last_render_min[1] + rl::getMouseY() / settings.default_font_size;
     return {x, y};
+}
+
+struct ZoneRenderSettings
+{
+    IVec2 offset;
 }
 
 <*
 @param [&in] term
 *>
-fn void Zone.render(&self, VirtualTerminal* term)
+fn void Zone.render(&self, VirtualTerminal* term, ZoneRenderSettings settings)
 {
-    int hw = term.width / 2;
-    int hh = term.height / 2;
+    IVec2 hsize = {terminal.width / 2, terminal.height / 2};
+    IVec2 focus = hsize;
+    if (self.player) focus = self.get_player_position();
+    focus += settings.offset;
 
-    int focus_x = hw;
-    int focus_y = hh;
+    IVec2 min = focus - hsize;
+    IVec2 max = focus + hsize;
 
-    if (self.player)
-    {
-        focus_x = self.player.get_position()[0];
-        focus_y = self.player.get_position()[1];
-    }
-
-    int min_y = focus_y - hh;
-    int min_x = focus_x - hw;
+    self.last_render_min = min;
 
     VisibilityTracker* vis = null;
     EntityVisibility ev = (EntityVisibility) self.player;
@@ -220,16 +215,15 @@ fn void Zone.render(&self, VirtualTerminal* term)
         vis = ev.get_visibility();
     }
 
-    for (int y = focus_y - hh; y < focus_y + hh; ++y)
+    for (int y = min[1]; y < max[1]; ++y)
     {
         if (y < 0 || y >= self.height) continue;
-        int term_y = y - min_y;
-        for (int x = focus_x - hw; x < focus_x + hw; ++x)
+        int term_y = y - min[1];
+        for (int x = min[0]; x < max[0]; ++x)
         {
             if (x < 0 || x >= self.width) continue;
-            bool is_explored = vis == null || vis.is_explored({x, y});
-            if (!is_explored) continue;
-            int term_x = x - min_x;
+            if (vis != null && !vis.is_explored({x, y})) continue;
+            int term_x = x - min[0];
             ZoneCell* cell = &self.cells[x + y * self.width];
             ZoneTerrain terr = cell.terrain;
             bool is_visible = vis == null || vis.is_visible({x, y});

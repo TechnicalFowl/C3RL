@@ -75,8 +75,8 @@ fn void VirtualTerminal.clear_to(&self, VCell glyph)
 }
 
 <*
-@require x >= 0 && x < self.width
-@require y >= 0 && y < self.height
+@require x >= 0 && x <= self.width
+@require y >= 0 && y <= self.height
 *>
 fn void VirtualTerminal.set_background(&self, int x, int y, rl::Color bg, int priority=0)
 {
@@ -86,11 +86,16 @@ fn void VirtualTerminal.set_background(&self, int x, int y, rl::Color bg, int pr
         cell.bg = bg;
         cell.bg_priority = priority;
     }
+    if (priority > cell.fg_priority)
+    {
+        cell.glyph ={ ' ', 0 };
+        cell.fg_priority = priority;
+    }
 }
 
 <*
-@require x0 >= 0 && x0 + w < self.width
-@require y0 >= 0 && y0 + h < self.height
+@require x0 >= 0 && x0 + w <= self.width
+@require y0 >= 0 && y0 + h <= self.height
 @require w > 0
 @require h > 0
 *>
@@ -106,18 +111,23 @@ fn void VirtualTerminal.fill_background(&self, int x0, int y0, int w, int h, rl:
                 cell.bg = bg;
                 cell.bg_priority = priority;
             }
+            if (priority > cell.fg_priority)
+            {
+                cell.glyph ={ ' ', 0 };
+                cell.fg_priority = priority;
+            }
         }
     }
 }
 
 <*
-@require x >= 0 && x < self.width
-@require y >= 0 && y < self.height
+@require x >= 0 && x <= self.width
+@require y >= 0 && y <= self.height
 *>
 fn void VirtualTerminal.set_tile(&self, int x, int y, char glyph, rl::Color fg=colors::WHITE, int priority=0)
 {
     VCell* cell = &self.buffer[self.width * y + x];
-    if (priority >= cell.fg_priority)
+    if (priority >= cell.fg_priority && priority >= cell.bg_priority)
     {
         cell.glyph = { glyph, 0 };
         cell.fg = fg;
@@ -126,8 +136,8 @@ fn void VirtualTerminal.set_tile(&self, int x, int y, char glyph, rl::Color fg=c
 }
 
 <*
-@require x0 >= 0 && x0 + w < self.width
-@require y0 >= 0 && y0 + h < self.height
+@require x0 >= 0 && x0 + w <= self.width
+@require y0 >= 0 && y0 + h <= self.height
 @require w > 0
 @require h > 0
 *>
@@ -138,7 +148,7 @@ fn void VirtualTerminal.fill_tile(&self, int x0, int y0, int w, int h, char glyp
         for (int x = x0; x < x0 + w; x++)
         {
             VCell* cell = &self.buffer[self.width * y + x];
-            if (priority >= cell.fg_priority)
+            if (priority >= cell.fg_priority && priority >= cell.bg_priority)
             {
                 cell.glyph = { glyph, 0 };
                 cell.fg = fg;
@@ -149,8 +159,8 @@ fn void VirtualTerminal.fill_tile(&self, int x0, int y0, int w, int h, char glyp
 }
 
 <*
-@require x0 >= 0 && x0 + w < self.width
-@require y0 >= 0 && y0 + h < self.height
+@require x0 >= 0 && x0 + w <= self.width
+@require y0 >= 0 && y0 + h <= self.height
 @require w > 0
 @require h > 0
 *>
@@ -206,13 +216,13 @@ fn void VirtualTerminal.box_tile(&self, int x0, int y0, int w, int h, bool doubl
 }
 
 <*
-@require x >= 0 && x < self.width * 2
-@require y >= 0 && y < self.height
+@require x >= 0 && x <= self.width * 2
+@require y >= 0 && y <= self.height
 *>
 fn void VirtualTerminal.set_text(&self, int x, int y, char glyph, rl::Color fg=colors::WHITE, int priority=0)
 {
     VCell* cell = &self.buffer[self.width * y + (x / 2)];
-    if (priority >= cell.fg_priority)
+    if (priority >= cell.fg_priority && priority >= cell.bg_priority)
     {
         if (x % 2 == 0)
         {
@@ -230,8 +240,8 @@ fn void VirtualTerminal.set_text(&self, int x, int y, char glyph, rl::Color fg=c
 }
 
 <*
-@require x0 >= 0 && x0 + w < self.width * 2
-@require y0 >= 0 && y0 + h < self.height
+@require x0 >= 0 && x0 + w <= self.width * 2
+@require y0 >= 0 && y0 + h <= self.height
 @require w > 0
 @require h > 0
 *>
@@ -250,7 +260,7 @@ fn void VirtualTerminal.fill_text(&self, int x0, int y0, int w, int h, char glyp
         if (x % 2 == 1)
         {
             VCell* cell = &self.buffer[self.width * y + (x / 2)];
-            if (priority >= cell.fg_priority)
+            if (priority >= cell.fg_priority && priority >= cell.bg_priority)
             {
                 cell.glyph = {' ', glyph };
                 cell.fg = fg;
@@ -262,7 +272,7 @@ fn void VirtualTerminal.fill_text(&self, int x0, int y0, int w, int h, char glyp
         for (; x <= x_max_full; x += 2)
         {
             VCell* cell = &self.buffer[self.width * y + (x / 2)];
-            if (priority >= cell.fg_priority)
+            if (priority >= cell.fg_priority && priority >= cell.bg_priority)
             {
                 cell.glyph = { glyph, glyph };
                 cell.fg = fg;
@@ -273,7 +283,7 @@ fn void VirtualTerminal.fill_text(&self, int x0, int y0, int w, int h, char glyp
         if (x_max_full != x_max)
         {
             VCell* cell = &self.buffer[self.width * y + (x_max / 2)];
-            if (priority >= cell.fg_priority)
+            if (priority >= cell.fg_priority && priority >= cell.bg_priority)
             {
                 cell.glyph[0] = glyph;
                 cell.fg = fg;
@@ -284,8 +294,8 @@ fn void VirtualTerminal.fill_text(&self, int x0, int y0, int w, int h, char glyp
 }
 
 <*
-@require x0 >= 0 && x0 + w < self.width * 2
-@require y0 >= 0 && y0 + h < self.height
+@require x0 >= 0 && x0 + w <= self.width * 2
+@require y0 >= 0 && y0 + h <= self.height
 @require w > 0
 @require h > 0
 *>
@@ -293,7 +303,7 @@ fn void VirtualTerminal.box_text(&self, int x0, int y0, int w, int h, bool doubl
 {
     int x_min = math::max(0, x0);
     int y_min = math::max(0, y0);
-    int x_max = math::min(self.width - 1, x0 + w - 1);
+    int x_max = math::min(self.width * 2 - 1, x0 + w - 1);
     int y_max = math::min(self.height - 1, y0 + h - 1);
 
     for (int x = x_min + 1; x < x_max; x++)
@@ -341,8 +351,8 @@ fn void VirtualTerminal.box_text(&self, int x0, int y0, int w, int h, bool doubl
 }
 
 <*
-@require x >= 0 && x < self.width * 2
-@require y >= 0 && y < self.height
+@require x >= 0 && x <= self.width * 2
+@require y >= 0 && y <= self.height
 *>
 fn void VirtualTerminal.write(&self, int x, int y, String text, rl::Color fg=colors::WHITE, int priority=0)
 {

@@ -56,6 +56,7 @@ fn void Player.free(&self) @dynamic
 {
     self.entity.free();
     self.nav.free();
+    self.vis.free();
 }
 
 fn Action Player.next_action(&self, double max_time) @dynamic
@@ -127,8 +128,8 @@ fn RLSettings Ex6.settings(&self) @dynamic
     );
 }
 
-// Tick is called every frame.
-fn void Ex6.tick(&self) @dynamic
+// Render is called every frame.
+fn void Ex6.render(&self) @dynamic
 {
     Player* pl = (Player*) c3rl::zone.player;
     if (rl::isMouseButtonPressed(rl::MouseButton.LEFT))

@@ -1,15 +1,18 @@
 module c3rl_ex5;
 
 import std::collections::list;
+import std::io;
 import std::math::random;
 
 import raylib5::rl;
 
 import c3rl;
 
-struct Ex5 (RLGame)
+struct Ex7 (RLGame)
 {
     random::Pcg32Random rng;
+    
+    int sidebar_width;
 }
 
 struct Player (Entity)
@@ -66,7 +69,7 @@ fn Action Player.next_action(&self, double max_time) @dynamic
     return null;
 }
 
-fn void Ex5.zone_generator(&self, Zone* zone)
+fn void Ex7.zone_generator(&self, Zone* zone)
 {
     for (int y = 0; y < zone.height; ++y)
     {
@@ -75,7 +78,7 @@ fn void Ex5.zone_generator(&self, Zone* zone)
             if (x == 10 && y == 10) continue;
             if (x == 0 || x == zone.width - 1 || y == 0 || y == zone.height - 1 || random::next_in_range(&self.rng, 0, 5) == 0)
             {
-                zone.set_terrain(x, y, '#', colors::WHITE, colors::BLACK, false);
+                zone.set_terrain(x, y, '#', colors::random_color(&self.rng), colors::BLACK, false);
             }
             else
             {
@@ -85,22 +88,21 @@ fn void Ex5.zone_generator(&self, Zone* zone)
     }
 
     Player* pl = mem::new(Player);
-    pl.new_init(zone, "Player", {10, 10});
+    pl.new_init(zone, "Player", {40, 10});
     zone.add_player(pl);
 }
 
-fn ZoneDescription Ex5.make_zone(&self)
+fn ZoneDescription Ex7.make_zone(&self)
 {
     ZoneDescription zone;
     zone.new_init("main", 80, 45);
-    zone.player_spawn = {10, 10};
-    zone.generator = (ZoneGenerator) &Ex5.zone_generator;
+    zone.generator = (ZoneGenerator) &Ex7.zone_generator;
     zone.generator_data = self;
     return zone;
 }
 
 // This is the settings for the game. We're using the default font, 16x16 characters, and a 80x45 terminal.
-fn RLSettings Ex5.settings(&self) @dynamic
+fn RLSettings Ex7.settings(&self) @dynamic
 {
     return c3rl::make_settings(
         asset_path: "../../assets",
@@ -108,89 +110,73 @@ fn RLSettings Ex5.settings(&self) @dynamic
         default_font_size: 16,
         terminal_width: 80,
         terminal_height: 45,
-        window_title: "C3RL Example 5",
+        window_title: "C3RL Example 7",
         initial_zone: self.make_zone()
     );
 }
 
+fn ZoneRenderSettings Ex7.pre_render(&self) @dynamic
+{
+    return { { self.sidebar_width / 2, 0} };
+}
+
 // Render is called every frame.
-fn void Ex5.render(&self) @dynamic
+fn void Ex7.render(&self) @dynamic
 {
     Player* pl = (Player*) c3rl::zone.player;
-    IVec2 player_pos = pl.get_position();
-    IVec2 zone_min = player_pos - {c3rl::terminal.width / 2, c3rl::terminal.height / 2};
-    if (!pl.nav.is_idle())
+    if (rl::isMouseButtonPressed(rl::MouseButton.LEFT))
     {
-        foreach(point: pl.nav.path)
+        if (pl.nav.is_idle())
         {
-            IVec2 term_pos = point - zone_min;
-            if (term_pos[0] >= 0 && term_pos[0] < c3rl::terminal.width && term_pos[1] >= 0 && term_pos[1] < c3rl::terminal.height)
-            {
-                c3rl::terminal.set_background(...term_pos, colors::DARK_GREEN, 5);
-            }
+            IVec2 pos = math::clamp(c3rl::zone.get_mouse_position(), int[<*>] {0, 0}, int[<*>] {c3rl::zone.width - 1, c3rl::zone.height - 1});
+            pl.nav.path_to(c3rl::zone, pl.get_position(), pos);
         }
-        
-        if (rl::isMouseButtonPressed(rl::MouseButton.LEFT))
+        else
         {
             pl.nav.abort();
         }
     }
-    else
-    {
-        IVec2 mouse = { rl::getMouseX() / 16, rl::getMouseY() / 16 };
-        IVec2 mouse_in_zone = c3rl::zone.get_mouse_position();
-        if (rl::isMouseButtonPressed(rl::MouseButton.LEFT))
-        {
-            pl.nav.path_to(c3rl::zone, player_pos, mouse_in_zone);
-        }
 
-        // Debug drawing for the mosue and perspective path.
-        if (mouse[0] >= 0 && mouse[0] < c3rl::terminal.width && mouse[1] >= 0 && mouse[1] < c3rl::terminal.height)
+    if (!pl.nav.is_idle())
+    {
+        switch (random::next_in_range(&self.rng, 0, 120))
         {
-            if (mouse_in_zone[0] < 0 || mouse_in_zone[0] >= c3rl::zone.width || mouse_in_zone[1] < 0 || mouse_in_zone[1] >= c3rl::zone.height)
-            {
-                c3rl::terminal.set_tile(...mouse, 'x', colors::RED, 10);
-            }
-            else
-            {
-                ZoneCell* cell = c3rl::zone.get_cell(...mouse_in_zone);
-                if (cell.terrain.passable)
-                {
-                    if (pl.nav.is_idle())
-                    {
-                        List(<IVec2>) path;
-                        path.temp_init();
-                        if (c3rl::zone.path(player_pos, mouse_in_zone, &path, false))
-                        {
-                            foreach(point: path)
-                            {
-                                IVec2 term_pos = point - zone_min;
-                                if (term_pos[0] >= 0 && term_pos[0] < c3rl::terminal.width && term_pos[1] >= 0 && term_pos[1] < c3rl::terminal.height)
-                                {
-                                    c3rl::terminal.set_background(...term_pos, colors::DARK_RED, 5);
-                                }
-                            }
-                            c3rl::terminal.set_tile(...mouse, 'x', colors::GREEN, 10);
-                        }
-                        else
-                        {
-                            c3rl::terminal.set_tile(...mouse, 'x', colors::RED, 10);
-                        }
-                    }
-                }
-                else
-                {
-                    c3rl::terminal.set_tile(...mouse, 'x', colors::RED, 10);
-                }
-            }
+            case 0: c3rl::log("Ouch! You stubbed your toe.", colors::RED);
+            case 1: c3rl::log("You hear a faint whisper.");
+            case 2: c3rl::log("You feel a chill down your spine.");
+            case 3: c3rl::log("You feel a sense of dread.");
+            default: break;
         }
     }
+    
+    int term_width = c3rl::terminal.width;
+    int term_height = c3rl::terminal.height;
+    int map_width = c3rl::terminal.width - self.sidebar_width;
+
+    gui::push_topbar("C3RL Example 7");
+    gui::push_bottombar(string::tformat("Player @ %d %d", ...pl.get_position()));
+    gui::push_bottombar(string::tformat("Mouse @ %d %d", ...pl.zone.get_mouse_position()));
+
+    int log_height = term_height / 3;
+    gui::begin_window("Log", {map_width, 0}, {self.sidebar_width, log_height});
+    
+    long start = math::max(c3rl::log_messages.len() - log_height + 2, 0l);
+    for (long i = start; i < c3rl::log_messages.len(); ++i)
+    {
+        LogMessage msg = c3rl::log_messages[i];
+        gui::text(msg.message, msg.color);
+    }
+
+    gui::end_window();
 }
 
 fn void main()
 {
-    Ex5 game;
+    Ex7 game;
+    game.sidebar_width = 30;
     random::seed_entropy(&game.rng);
+
+    c3rl::log("You descend into the dungeon...", colors::GREEN);
 
     c3rl::launch(&game);
 }

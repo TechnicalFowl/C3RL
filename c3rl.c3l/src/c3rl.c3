@@ -1,9 +1,11 @@
 module c3rl;
 
+import std::collections::list;
 import std::io;
 
 import raylib5::rl;
 
+import c3rl::gui @public;
 import c3rl::internal @public;
 
 Font* root_font;
@@ -11,6 +13,18 @@ Font* root_hfont;
 bool taking_screenshot = false;
 String screenshot_filename;
 RLSettings settings;
+
+struct LogMessage
+{
+    String message;
+    rl::Color color;
+}
+List(<LogMessage>) log_messages;
+
+fn void log(String message, rl::Color color = colors::WHITE)
+{
+    log_messages.push({message, color});
+}
 
 struct RLSettings
 {
@@ -48,7 +62,9 @@ fn RLSettings make_settings(
 interface RLGame
 {
     fn RLSettings settings();
-    fn void tick();
+    fn void update(double time) @optional; // Called after a player action
+    fn ZoneRenderSettings pre_render() @optional; // Called before rendering the zone
+    fn void render(); // Called every frame, happends after the zone is rendered
 }
 
 interface ResizeEvent
@@ -100,6 +116,7 @@ fn void launch(RLGame game)
 
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Starting game loop...");
 
+    gui::gui_data.new_init();
 
     @pool()
     {
@@ -121,13 +138,17 @@ fn void launch(RLGame game)
 
             terminal.clear(colors::BLACK);
 
+            gui::gui_data.start_frame();
+
             if (zone)
             {
-                zone.update();
-                zone.render(terminal);
+                zone.update(game);
+                ZoneRenderSettings render_settings = &game.pre_render? game.pre_render() : {};
+                zone.render(terminal, render_settings);
             }
 
-            game.tick();
+            game.render();
+            gui::gui_data.render();
 
             terminal.render();
 
