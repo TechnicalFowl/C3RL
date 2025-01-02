@@ -191,26 +191,21 @@ interface EntityVisibility
 struct VisibilityTracker
 {
     Zone* zone;
-    int width;
-    int height;
-    ulong* visible;
-    ulong* explored;
+    BitBoard visible;
+    BitBoard explored;
 }
 
 fn void VisibilityTracker.new_init(&self, Zone* z)
 {
     self.zone = z;
-    self.width = z.width;
-    self.height = z.height;
-    usz size = (((usz) self.width * self.height) - 1) / 64 + 1;
-    self.visible = mem::new_array(ulong, size);
-    self.explored = mem::new_array(ulong, size);
+    self.visible.new_init(z.width, z.height);
+    self.explored.new_init(z.width, z.height);
 }
 
 fn void VisibilityTracker.free(&self)
 {
-    mem::free(self.visible);
-    mem::free(self.explored);
+    self.visible.free();
+    self.explored.free();
 }
 
 struct VisibilityTrackerCB
@@ -237,8 +232,7 @@ fn void VisibilityTracker.sweep_line(&self, IVec2 from, IVec2 to)
 
 fn void VisibilityTracker.sweep(&self, IVec2 pos, int range)
 {
-    usz size = (((usz) self.width * self.height) - 1) / 64 + 1;
-    mem::set(self.visible, 0, size * 8);
+    self.visible.clear();
     self.set_visible(pos, true);
     self.set_explored(pos, true);
     
@@ -260,53 +254,26 @@ fn void VisibilityTracker.sweep(&self, IVec2 pos, int range)
 
 fn void VisibilityTracker.clear(&self)
 {
-    usz size = (((usz) self.width * self.height) - 1) / 64 + 1;
-    mem::set(self.visible, 0, size * 8);
-    mem::set(self.explored, 0, size * 8);
+    self.visible.clear();
+    self.explored.clear();
 }
 
 fn bool VisibilityTracker.is_visible(&self, IVec2 pos)
 {
-    assert(pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height, "Out of bounds [%d %d] outside [%d x %d] area", pos[0], pos[1], self.width, self.height);
-    int index = (pos[0] + pos[1] * self.width);
-    int bit = index % 64;
-    return (self.visible[index / 64] & (1u64 << bit)) != 0;
+    return self.visible.get(pos);
 }
 
 fn bool VisibilityTracker.is_explored(&self, IVec2 pos)
 {
-    assert(pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height, "Out of bounds [%d %d] outside [%d x %d] area", pos[0], pos[1], self.width, self.height);
-    int index = (pos[0] + pos[1] * self.width);
-    int bit = index % 64;
-    return (self.explored[index / 64] & (1u64 << bit)) != 0;
+    return self.explored.get(pos);
 }
 
 fn void VisibilityTracker.set_visible(&self, IVec2 pos, bool visible)
 {
-    assert(pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height, "Out of bounds [%d %d] outside [%d x %d] area", pos[0], pos[1], self.width, self.height);
-    int index = (pos[0] + pos[1] * self.width);
-    int bit = index % 64;
-    if (visible)
-    {
-        self.visible[index / 64] |= 1u64 << bit;
-    }
-    else
-    {
-        self.visible[index / 64] &= ~(1u64 << bit);
-    }
+    self.visible.set(pos, visible);
 }
 
 fn void VisibilityTracker.set_explored(&self, IVec2 pos, bool visible)
 {
-    assert(pos[0] >= 0 && pos[0] < self.width && pos[1] >= 0 && pos[1] < self.height, "Out of bounds [%d %d] outside [%d x %d] area", pos[0], pos[1], self.width, self.height);
-    int index = (pos[0] + pos[1] * self.width);
-    int bit = index % 64;
-    if (visible)
-    {
-        self.explored[index / 64] |= 1u64 << bit;
-    }
-    else
-    {
-        self.explored[index / 64] &= ~(1u64 << bit);
-    }
+    self.explored.set(pos, visible);
 }
