@@ -89,11 +89,20 @@ fn void BitBoard.set(&self, IVec2 pos, bool value)
 
 module c3rl::internal @private;
 
+extern fn bool isDebuggerPresent() @extern("IsDebuggerPresent") @if(env::WIN32);
+
 fn void waitForDebugger()
 {
+$if env::WIN32:
+    while (!isDebuggerPresent())
+    {
+        // Wait for the debugger to attach
+    }
+$else
     int wait_for_debugger = 1;
     while (@volatile_load(wait_for_debugger))
     {
         // Wait for the debugger to attach
     }
+$endif
 }

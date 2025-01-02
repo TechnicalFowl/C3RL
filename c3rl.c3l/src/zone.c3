@@ -188,6 +188,28 @@ fn IVec2 Zone.get_mouse_position(&self)
     return {x, y};
 }
 
+fn IVec2 Zone.find_nearest_empty(&self, IVec2 pos)
+{
+    int x = 0;
+    int y = 0;
+    int dx = 0;
+    int dy = -1;
+    const int RANGE = 10;
+    for (int i = 0; i < RANGE * RANGE * 4; ++i)
+    {
+        if (self.get_cell(pos[0] + x, pos[1] + y).terrain.passable) return pos;
+        if  (x == y || ((x < 0) && (x == -y)) || ((x > 0) && (x == 1 - y)))
+        {
+            int t = dx;
+            dx = -dy;
+            dy = t;
+        }
+        x += dx;
+        y += dy;
+    }
+    return pos;
+}
+
 struct ZoneRenderSettings
 {
     IVec2 offset;
@@ -398,4 +420,24 @@ fn void line(IVec2 start, IVec2 end, LineCallback callback, void* data=null)
             start[1] += step[1];
         }
     } while (callback(data, start) && start != end);
+}
+
+fn void spiral(IVec2 start, int range, LineCallback cb, void* cb_data=null)
+{
+    int x = 0;
+    int y = 0;
+    int dx = 0;
+    int dy = -1;
+    for (int i = 0; i < range * range * 4; ++i)
+    {
+        if (!cb(cb_data, start + {x, y})) break;
+        if  (x == y || ((x < 0) && (x == -y)) || ((x > 0) && (x == 1 - y)))
+        {
+            int t = dx;
+            dx = -dy;
+            dy = t;
+        }
+        x += dx;
+        y += dy;
+    }
 }

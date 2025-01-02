@@ -12,6 +12,7 @@ struct DungeonGame (RLGame)
 {
     random::Pcg32Random rng;
     
+    bool hide_gui;
     int sidebar_width;
 }
 
@@ -40,7 +41,7 @@ fn double Player.get_idle_time(&self) @dynamic => self.entity.get_idle_time();
 fn void Player.give_idle_time(&self, double time) @dynamic => self.entity.give_idle_time(time);
 
 // Implement EntityVisibility
-fn VisibilityTracker* Player.get_visibility(&self) @dynamic => &self.vis;
+//fn VisibilityTracker* Player.get_visibility(&self) @dynamic => &self.vis;
 fn void Player.on_post_load(&self) @dynamic => self.vis.sweep(self.get_position(), 10);
 
 fn void Player.new_init(&self, Zone* z, String n, IVec2 p)
@@ -84,24 +85,13 @@ fn Action Player.next_action(&self, double max_time) @dynamic
 
 fn void DungeonGame.zone_generator(&self, Zone* zone)
 {
-    for (int y = 0; y < zone.height; ++y)
-    {
-        for (int x = 0; x < zone.width; ++x)
-        {
-            if (x == 10 && y == 10) continue;
-            if (x == 0 || x == zone.width - 1 || y == 0 || y == zone.height - 1 || random::next_in_range(&self.rng, 0, 5) == 0)
-            {
-                zone.set_terrain(x, y, '#', colors::random_color(&self.rng), colors::BLACK, false);
-            }
-            else
-            {
-                zone.set_terrain(x, y, '.', colors::DARKEST_GREY, colors::BLACK, true);
-            }
-        }
-    }
+    CellularAutomata gen;
+    gen.new_init(5, 0.45, 5, 2);
+
+    gen.generate(zone, &self.rng);
 
     Player* pl = mem::new(Player);
-    pl.new_init(zone, "Player", {40, 10});
+    pl.new_init(zone, "Player", zone.find_nearest_empty({50, 50}));
     zone.add_player(pl);
 }
 
@@ -130,7 +120,7 @@ fn RLSettings DungeonGame.settings(&self) @dynamic
 
 fn ZoneRenderSettings DungeonGame.pre_render(&self) @dynamic
 {
-    return { { self.sidebar_width / 2, 0} };
+    return { { self.hide_gui ? 0 : self.sidebar_width / 2, 0} };
 }
 
 // Render is called every frame.
@@ -163,31 +153,40 @@ fn void DungeonGame.render(&self) @dynamic
             default: break;
         }
     }
-    
-    int term_width = c3rl::terminal.width;
-    int term_height = c3rl::terminal.height;
-    int map_width = c3rl::terminal.width - self.sidebar_width;
-    
-    int log_height = term_height / 3;
-    gui::begin_window("Log", {map_width, 0}, {self.sidebar_width, log_height});
-    
-    long start = math::max(c3rl::log_messages.len() - log_height + 2, 0l);
-    for (long i = start; i < c3rl::log_messages.len(); ++i)
+
+    if (rl::isKeyPressed(rl::KEY_F1))
     {
-        LogMessage msg = c3rl::log_messages[i];
-        gui::text(msg.message, msg.color);
+        self.hide_gui = !self.hide_gui;
     }
+    
+    if (!self.hide_gui)
+    {
+        int term_width = c3rl::terminal.width;
+        int term_height = c3rl::terminal.height;
+        int map_width = c3rl::terminal.width - self.sidebar_width;
+        
+        int log_height = term_height / 3;
+        gui::begin_window("Log", {map_width, 0}, {self.sidebar_width, log_height});
+        
+        long start = math::max(c3rl::log_messages.len() - log_height + 2, 0l);
+        for (long i = start; i < c3rl::log_messages.len(); ++i)
+        {
+            LogMessage msg = c3rl::log_messages[i];
+            gui::text(msg.message, msg.color);
+        }
 
-    gui::end_window();
+        gui::end_window();
 
-    gui::begin_window("Inventory", {map_width, log_height}, {self.sidebar_width, term_height - log_height});
-    gui::text("You have nothing of value.", colors::WHITE);
-    gui::end_window();
+        gui::begin_window("Inventory", {map_width, log_height}, {self.sidebar_width, term_height - log_height});
+        gui::text("You have nothing of value.", colors::WHITE);
+        gui::end_window();
+    }
 }
 
 fn void main()
 {
     DungeonGame game;
+    game.hide_gui = true;
     game.sidebar_width = 30;
     random::seed_entropy(&game.rng);
 

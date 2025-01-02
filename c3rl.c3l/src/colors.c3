@@ -138,6 +138,16 @@ fn Color Color.darken(&self, float pct)
     };
 }
 
+fn Color Color.randomize(&self, Random rng, float pct)
+{
+    return {
+        (char) math::clamp(math::floor(self.r * (1.0f - (random::next_double(rng) * 2 - 1) * pct)), 0, 255),
+        (char) math::clamp(math::floor(self.g * (1.0f - (random::next_double(rng) * 2 - 1) * pct)), 0, 255),
+        (char) math::clamp(math::floor(self.b * (1.0f - (random::next_double(rng) * 2 - 1) * pct)), 0, 255),
+        self.a
+    };
+}
+
 module c3rl::colors;
 
 import std::math::random;
@@ -161,7 +171,8 @@ const Color AQUAMARINE = {127, 255, 212, 255};
 const Color BEIGE = {245, 245, 220, 255};
 const Color BLANCHED_ALMOND = {255, 235, 205, 255};
 const Color BLUE_VIOLET = {138, 43, 226, 255};
-const Color BROWN = {165, 42, 42, 255};
+const Color BROWN = {142, 83, 0, 255};
+const Color DARK_BROWN = {112, 53, 0, 255};
 const Color BURLY_WOOD = {222, 184, 135, 255};
 const Color CADET_BLUE = {95, 158, 160, 255};
 const Color CHARTREUSE = {127, 255, 0, 255};
