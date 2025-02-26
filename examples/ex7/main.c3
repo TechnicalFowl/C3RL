@@ -13,6 +13,8 @@ struct Ex7 (RLGame)
     random::Pcg32Random rng;
     
     int sidebar_width;
+    String[10] inventory;
+    int selected_item;
 }
 
 struct Player (Entity)
@@ -157,7 +159,7 @@ fn void Ex7.render(&self) @dynamic
     gui::push_bottombar(string::tformat("Player @ %d %d", ...pl.get_position()));
     gui::push_bottombar(string::tformat("Mouse @ %d %d", ...pl.zone.get_mouse_position()));
 
-    int log_height = term_height / 3;
+    int log_height = 7;
     gui::begin_window("Log", {map_width, 0}, {self.sidebar_width, log_height});
     
     long start = math::max(c3rl::log_messages.len() - log_height + 2, 0l);
@@ -168,12 +170,62 @@ fn void Ex7.render(&self) @dynamic
     }
 
     gui::end_window();
+
+    gui::begin_window("Inventory", {map_width, log_height}, {self.sidebar_width, term_height - log_height});
+    for (int i = 0; i < self.inventory.len; ++i)
+    {
+        if (self.inventory[i] == "") continue;
+        if (gui::button(self.inventory[i]))
+        {
+            self.selected_item = i;
+            gui::open_popup("Item Options");
+        }
+    }
+    gui::end_window();
+
+    if (rl::isKeyPressed(rl::KEY_I))
+    {
+        gui::open_popup("Store");
+    }
+
+    if (gui::begin_popup("Item Options", {map_width - 20, log_height + 5}, {20, 8}))
+    {
+        if (gui::button("Use", rl::KEY_U))
+        {
+            c3rl::log(string::tformat("You use the %s.", self.inventory[self.selected_item]));
+            gui::close_current_popup();
+        }
+        if (gui::button("Drop", rl::KEY_D))
+        {
+            c3rl::log(string::tformat("You drop the %s.", self.inventory[self.selected_item]));
+            self.inventory[self.selected_item] = "";
+            gui::close_current_popup();
+        }
+        if (gui::button("Close") || rl::isKeyPressed(rl::KEY_ESCAPE))
+        {
+            gui::close_current_popup();
+        }
+        gui::end_popup();
+    }
+
+    if (gui::begin_popup("Store", {5, 5}, {map_width - 10, term_height - 10}))
+    {
+        gui::text("Welcome to the store!");
+        gui::text("We have nothing for sale.");
+        gui::text("");
+        if (gui::button("Close") || rl::isKeyPressed(rl::KEY_ESCAPE))
+        {
+            gui::close_current_popup();
+        }
+        gui::end_popup();
+    }
 }
 
 fn void main()
 {
     Ex7 game;
     game.sidebar_width = 30;
+    game.inventory = { "Sword", "Shield", "Potion", "", "", "", "", "", "", "" };
     random::seed_entropy(&game.rng);
 
     c3rl::log("You descend into the dungeon...", colors::GREEN);
