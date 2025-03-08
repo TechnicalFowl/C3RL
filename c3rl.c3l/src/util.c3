@@ -3,18 +3,13 @@ module c3rl;
 import std::math;
 
 def IVec2 = int[<2>]; 
+def IVec3 = int[<3>]; 
+def IVec4 = int[<4>];
 
 fn uint IVec2.hash(self) => ((uint) self[0]) * 2654435761u + ((uint) self[1]);
 
-fn IVec2 ivec2_sign(IVec2 v)
-{
-    return { math::sign(v[0]), math::sign(v[1]) };
-}
-
-fn int ivec2_distance(IVec2 a, IVec2 b)
-{
-    return math::abs(a[0] - b[0]) + math::abs(a[1] - b[1]);
-}
+fn IVec2 IVec2.sign(&self) => { math::sign(self.x), math::sign(self.y) };
+fn int IVec2.distance(self, IVec2 other) => math::abs(self - other).sum();
 
 struct BitBoard
 {
@@ -24,8 +19,8 @@ struct BitBoard
 }
 
 <*
-@require w > 0, "Width must be greater than zero"
-@require h > 0, "Height must be greater than zero"
+@require w > 0: "Width must be greater than zero"
+@require h > 0: "Height must be greater than zero"
 *>
 fn void BitBoard.new_init(&self, usz w, usz h)
 {
@@ -45,8 +40,8 @@ fn void BitBoard.clear(&self)
 }
 
 <*
-@require w > 0, "Width must be greater than zero"
-@require h > 0, "Height must be greater than zero"
+@require w > 0: "Width must be greater than zero"
+@require h > 0: "Height must be greater than zero"
 *>
 fn void BitBoard.resize(&self, usz w, usz h)
 {
@@ -57,8 +52,8 @@ fn void BitBoard.resize(&self, usz w, usz h)
 }
 
 <*
-@require pos[0] >= 0, pos[0] < self.width, "Invalid position x"
-@require pos[1] >= 0, pos[1] < self.height, "Invalid position y"
+@require pos[0] >= 0, pos[0] < self.width: "Invalid position x"
+@require pos[1] >= 0, pos[1] < self.height: "Invalid position y"
 *>
 fn bool BitBoard.get(&self, IVec2 pos)
 {
@@ -69,8 +64,8 @@ fn bool BitBoard.get(&self, IVec2 pos)
 }
 
 <*
-@require pos[0] >= 0, pos[0] < self.width, "Invalid position x"
-@require pos[1] >= 0, pos[1] < self.height, "Invalid position y"
+@require pos[0] >= 0, pos[0] < self.width: "Invalid position x"
+@require pos[1] >= 0, pos[1] < self.height: "Invalid position y"
 *>
 fn void BitBoard.set(&self, IVec2 pos, bool value)
 {

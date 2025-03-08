@@ -226,7 +226,7 @@ fn void VisibilityTracker.sweep_line(&self, IVec2 from, IVec2 to)
 {
     self.set_visible(from, true);
     self.set_explored(from, true);
-    VisibilityTrackerCB cb_data = { self, 0, ivec2_distance(from, to) };
+    VisibilityTrackerCB cb_data = { self, 0, from.distance(to) };
     c3rl::line(from, to, (LineCallback) &VisibilityTrackerCB.line_cb, &cb_data);
 }
 

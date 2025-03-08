@@ -29,7 +29,7 @@ struct VirtualTerminal
 VirtualTerminal* terminal;
 
 <*
-@require w > 0, h > 0, "Width and height must be greater than zero"
+@require w > 0, h > 0: "Width and height must be greater than zero"
 *>
 fn void VirtualTerminal.new_init(&self, int w, int h)
 {
@@ -49,7 +49,7 @@ fn void VirtualTerminal.free(&self)
 }
 
 <*
-@require new_width > 0, new_height > 0, "Width and height must be greater than zero"
+@require new_width > 0, new_height > 0: "Width and height must be greater than zero"
 *>
 fn void VirtualTerminal.on_resize(&self, int new_width, int new_height) @dynamic
 {
