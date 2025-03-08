@@ -1,0 +1,1 @@
+I recompiled raylib.lib for windows-x64 with /GS- which removed the need for wincrt=none.
