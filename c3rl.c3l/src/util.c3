@@ -6,7 +6,7 @@ def IVec2 = int[<2>];
 def IVec3 = int[<3>]; 
 def IVec4 = int[<4>];
 
-fn uint IVec2.hash(self) => ((uint) self[0]) * 2654435761u + ((uint) self[1]);
+fn uint IVec2.hash(self) => ((uint) self.x) * 2654435761u + ((uint) self.y);
 
 fn IVec2 IVec2.sign(&self) => { math::sign(self.x), math::sign(self.y) };
 fn int IVec2.distance(self, IVec2 other) => math::abs(self - other).sum();
@@ -52,24 +52,24 @@ fn void BitBoard.resize(&self, usz w, usz h)
 }
 
 <*
-@require pos[0] >= 0, pos[0] < self.width: "Invalid position x"
-@require pos[1] >= 0, pos[1] < self.height: "Invalid position y"
+@require pos.x >= 0, pos.x < self.width: "Invalid position x"
+@require pos.y >= 0, pos.y < self.height: "Invalid position y"
 *>
 fn bool BitBoard.get(&self, IVec2 pos)
 {
-    usz idx = pos[1] * self.width + pos[0];
+    usz idx = pos.y * self.width + pos.x;
     usz index = idx / 64;
     usz bit = idx % 64;
     return (self.data[index] & (1ul << bit)) != 0;
 }
 
 <*
-@require pos[0] >= 0, pos[0] < self.width: "Invalid position x"
-@require pos[1] >= 0, pos[1] < self.height: "Invalid position y"
+@require pos.x >= 0, pos.x < self.width: "Invalid position x"
+@require pos.y >= 0, pos.y < self.height: "Invalid position y"
 *>
 fn void BitBoard.set(&self, IVec2 pos, bool value)
 {
-    usz idx = pos[1] * self.width + pos[0];
+    usz idx = pos.y * self.width + pos.x;
     usz index = idx / 64;
     usz bit = idx % 64;
     if (value)
@@ -83,6 +83,7 @@ fn void BitBoard.set(&self, IVec2 pos, bool value)
 }
 
 module c3rl::internal @private;
+import std::io;
 
 extern fn bool isDebuggerPresent() @extern("IsDebuggerPresent") @if(env::WIN32);
 
@@ -99,5 +100,48 @@ $else
     {
         // Wait for the debugger to attach
     }
+$endif
+}
+
+struct ExceptionRecord
+{
+    uint code;
+    uint flags;
+    void* record;
+    void* address;
+}
+
+def UnhandledExceptionFilter = fn int (ExceptionRecord* exception_info);
+UnhandledExceptionFilter g_previous_filter;
+PanicFn g_previous_panic;
+bool g_has_panicked;
+extern fn UnhandledExceptionFilter setUnhandledExceptionFilter(UnhandledExceptionFilter filter) @extern("SetUnhandledExceptionFilter") @if(env::WIN32);
+
+fn int exceptionHandler(ExceptionRecord* exception_info)
+{
+    if (!g_has_panicked)
+    {
+        io::eprintfn("Unhandled exception: %X", exception_info.code);
+        builtin::print_backtrace("Unhandled exception", 0);
+    }
+    if (g_previous_filter)
+    {
+        return g_previous_filter(exception_info);
+    }
+    return 1;
+}
+
+fn void panic_tracker(String message, String file, String function, uint line)
+{
+    g_has_panicked = true;
+    g_previous_panic(message, file, function, line);
+}
+
+fn void initExceptionHandler() @init
+{
+$if env::WIN32:
+    g_previous_filter = setUnhandledExceptionFilter(&exceptionHandler);
+    g_previous_panic = builtin::panic;
+    builtin::panic = &panic_tracker;
 $endif
 }
