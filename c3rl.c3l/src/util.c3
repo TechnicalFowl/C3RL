@@ -121,8 +121,13 @@ fn int exceptionHandler(ExceptionRecord* exception_info)
 {
     if (!g_has_panicked)
     {
-        io::eprintfn("Unhandled exception: %X", exception_info.code);
-        builtin::print_backtrace("Unhandled exception", 0);
+        @stack_mem(512; Allocator allocator)
+        {
+            DString s;
+            s.new_init(allocator: allocator);
+            s.appendf("Unhandled exception (%X)", exception_info.code);
+            builtin::print_backtrace(s.str_view(), 8);
+        };
     }
     if (g_previous_filter)
     {
