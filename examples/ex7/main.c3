@@ -11,51 +11,70 @@ import c3rl;
 struct Ex7 (RLGame)
 {
     random::Pcg32Random rng;
-    
+    Entity player;
     int sidebar_width;
     String[10] inventory;
     int selected_item;
 }
 
+fn Entity Ex7.get_player(&self) @dynamic => self.player;
+
 struct Player (Entity)
 {
-    inline EntityCommon entity;
+    String name;
+    Zone* zone;
+    IVec2 position;
+    Appearance look;
 
     Navigator nav;
     float nav_delay;
 }
 
 // @Todo: There should be an easy way to avoid this boilerplate?...
-fn Zone* Player.get_zone(&self) @dynamic => self.entity.get_zone();
-fn String Player.get_name(&self) @dynamic => self.entity.get_name();
-fn IVec2 Player.get_position(&self) @dynamic => self.entity.get_position();
-fn void Player.set_position(&self, IVec2 pos) @dynamic => self.entity.set_position(pos);
-fn char Player.get_glyph(&self) @dynamic => self.entity.get_glyph();
-fn rl::Color Player.get_color(&self) @dynamic => self.entity.get_color();
-fn double Player.get_idle_time(&self) @dynamic => self.entity.get_idle_time();
-fn void Player.give_idle_time(&self, double time) @dynamic => self.entity.give_idle_time(time);
+fn Zone* Player.get_zone(&self) @dynamic => self.zone;
+fn String Player.get_name(&self) @dynamic => self.name;
+fn IVec2 Player.get_position(&self) @dynamic => self.position;
+fn void Player.set_position(&self, IVec2 pos) @dynamic
+{
+    c3rl::entity_set_position(self, pos);
+    self.position = pos;
+}
+fn Appearance Player.get_look(&self) @dynamic => self.look;
+fn double Player.get_idle_time(&self) @dynamic => 0.0;
+fn void Player.give_idle_time(&self, double time) @dynamic {}
+fn bool Player.is_dead(&self) @dynamic => false;
 
 fn void Player.new_init(&self, Zone* z, String n, IVec2 p)
 {
-    self.entity.new_init(z, n, p, '@', colors::WHITE);
+    self.zone = z;
+    self.name = n;
+    self.position = p;
+    self.look = PLAYER;
     self.nav.new_init();
     self.nav_delay = 0.2f;
 }
 
 fn void Player.free(&self) @dynamic
 {
-    self.entity.free();
     self.nav.free();
+}
+
+fn void Player.on_update(&self, double delta_time) @dynamic
+{
+}
+
+fn void Player.on_render(&self, VirtualTerminal* terminal, IVec2 term_pos) @dynamic
+{
 }
 
 fn Action Player.next_action(&self, double max_time) @dynamic
 {
     if (self.nav.is_idle())
     {
-        if (rl::isKeyPressed(rl::KEY_W)) return c3rl::do_move({0, -1});
-        if (rl::isKeyPressed(rl::KEY_S)) return c3rl::do_move({0, 1});
-        if (rl::isKeyPressed(rl::KEY_A)) return c3rl::do_move({-1, 0});
-        if (rl::isKeyPressed(rl::KEY_D)) return c3rl::do_move({1, 0});
+        if (c3rl::is_key_pressed(MOVE_UP)) return c3rl::do_move({0, -1});
+        if (c3rl::is_key_pressed(MOVE_DOWN)) return c3rl::do_move({0, 1});
+        if (c3rl::is_key_pressed(MOVE_RIGHT)) return c3rl::do_move({-1, 0});
+        if (c3rl::is_key_pressed(MOVE_LEFT)) return c3rl::do_move({1, 0});
     }
     else
     {
@@ -63,7 +82,7 @@ fn Action Player.next_action(&self, double max_time) @dynamic
         if (self.nav_delay <= 0)
         {
             self.nav_delay = 0.2f;
-            IVec2 next_move = self.nav.next_point() - self.entity.position;
+            IVec2 next_move = self.nav.next_point() - self.position;
             assert(math::abs(next_move[0]) + math::abs(next_move[1]) == 1, "Invalid move from navigator");
             return c3rl::do_move(next_move);
         }
@@ -73,25 +92,26 @@ fn Action Player.next_action(&self, double max_time) @dynamic
 
 fn void Ex7.zone_generator(&self, Zone* zone)
 {
-    for (int y = 0; y < zone.height; ++y)
+    for (int y = 0; y < zone.size.y; ++y)
     {
-        for (int x = 0; x < zone.width; ++x)
+        for (int x = 0; x < zone.size.x; ++x)
         {
             if (x == 10 && y == 10) continue;
-            if (x == 0 || x == zone.width - 1 || y == 0 || y == zone.height - 1 || random::next_in_range(&self.rng, 0, 5) == 0)
+            if (x == 0 || x == zone.size.x - 1 || y == 0 || y == zone.size.y - 1 || random::next_in_range(&self.rng, 0, 5) == 0)
             {
-                zone.set_terrain(x, y, '#', colors::random_color(&self.rng), colors::BLACK, false);
+                zone.set_terrain(x, y, WALL);
             }
             else
             {
-                zone.set_terrain(x, y, ' ', colors::WHITE, colors::BLACK, true);
+                zone.set_terrain(x, y, FLOOR);
             }
         }
     }
 
     Player* pl = mem::new(Player);
     pl.new_init(zone, "Player", {40, 10});
-    zone.add_player(pl);
+    zone.add_entity(pl);
+    self.player = pl;
 }
 
 fn ZoneDescription Ex7.make_zone(&self)
@@ -117,21 +137,16 @@ fn RLSettings Ex7.settings(&self) @dynamic
     );
 }
 
-fn ZoneRenderSettings Ex7.pre_render(&self) @dynamic
-{
-    return { { self.sidebar_width / 2, 0} };
-}
-
 // Render is called every frame.
 fn void Ex7.render(&self) @dynamic
 {
-    Player* pl = (Player*) c3rl::zone.player;
+    Player* pl = (Player*) self.player;
     if (rl::isMouseButtonPressed(rl::MouseButton.LEFT) && !gui::want_mouse_input())
     {
         if (pl.nav.is_idle())
         {
-            IVec2 pos = math::clamp(c3rl::zone.get_mouse_position(), int[<*>] {0, 0}, int[<*>] {c3rl::zone.width - 1, c3rl::zone.height - 1});
-            pl.nav.path_to(c3rl::zone, pl.get_position(), pos);
+            IVec2 pos = c3rl::current_zone.get_mouse_position();
+            pl.nav.path_to(c3rl::current_zone, pl.get_position(), pos);
         }
         else
         {
@@ -151,9 +166,9 @@ fn void Ex7.render(&self) @dynamic
         }
     }
     
-    int term_width = c3rl::terminal.width;
-    int term_height = c3rl::terminal.height;
-    int map_width = c3rl::terminal.width - self.sidebar_width;
+    int term_width = c3rl::ui_term.width;
+    int term_height = c3rl::ui_term.height;
+    int map_width = c3rl::ui_term.width - self.sidebar_width;
 
     gui::push_topbar("C3RL Example 7");
     gui::push_bottombar(string::tformat("Player @ %d %d", ...pl.get_position()));
@@ -224,11 +239,47 @@ fn void Ex7.render(&self) @dynamic
 fn void main()
 {
     Ex7 game;
-    game.sidebar_width = 30;
+    game.sidebar_width = 60;
     game.inventory = { "Sword", "Shield", "Potion", "", "", "", "", "", "", "" };
     random::seed_entropy(&game.rng);
 
     c3rl::log("You descend into the dungeon...", colors::GREEN);
 
     c3rl::launch(&game);
+}
+
+module c3rl::game;
+import c3rl;
+import raylib5::rl;
+
+// Appearance defines the look of something on the screen
+enum Appearance : (AppearanceInfo info)
+{
+    EMPTY = { ' ', colors::BLACK, -1 },
+    PLAYER = { '@', colors::WHITE, -1 },
+    WALL = { '#', colors::LIGHT_GREY, -1 },
+    FLOOR = { '.', colors::DARK_GREY, -1 },
+}
+
+// Terrain defines static parts of the map that don't have logic
+enum Terrain : (TerrainInfo info)
+{
+    EMPTY = { "", 0, Appearance.EMPTY, "" },
+    WALL = { "", 0, Appearance.WALL, "" },
+    FLOOR = { "", 0, Appearance.FLOOR, "" },
+}
+
+// Object defines static parts of the map that may have additional interaction logic
+enum Object : (ObjectInfo info)
+{
+    EMPTY = { "", 0, Appearance.EMPTY, "", null },
+}
+
+// Inputs are abstract actions and are assicated to default input keys
+enum Input : inline int (rl::KeyboardKey primary, rl::KeyboardKey secondary)
+{
+    MOVE_UP = { rl::KEY_UP, rl::KEY_KP_8 },
+    MOVE_DOWN = { rl::KEY_DOWN, rl::KEY_KP_2 },
+    MOVE_LEFT = { rl::KEY_LEFT, rl::KEY_KP_4 },
+    MOVE_RIGHT = { rl::KEY_RIGHT, rl::KEY_KP_6 },
 }

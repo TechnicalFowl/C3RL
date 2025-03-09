@@ -20,6 +20,8 @@ RLSettings settings;
 VirtualTerminal* map_term;
 VirtualTerminal* ui_term;
 
+Zone* current_zone;
+
 struct RLSettings
 {
     String asset_path; // The asset path for the game's assets
@@ -57,7 +59,6 @@ interface RLGame
 {
     fn RLSettings settings();
     fn void update(double time) @optional; // Called after a player action
-    fn ZoneRenderSettings pre_render() @optional; // Called before rendering the zone
     fn void render(); // Called every frame, happends after the zone is rendered
 
     fn Entity get_player();
@@ -100,19 +101,18 @@ fn void launch(RLGame game)
         return;
     }
     root_hfont = hfont;
+    root_sprite_font = root_font;
 
     map_term = mem::new(VirtualTerminal);
     map_term.new_init(settings.terminal_width, settings.terminal_height, root_font);
     ui_term = mem::new(VirtualTerminal);
     ui_term.new_init(settings.terminal_width * 2, settings.terminal_height, root_hfont);
 
-    Zone* zone;
-
     if (settings.initial_zone.width != 0)
     {
         rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Loading Zone...");
-        zone = mem::new(Zone);
-        zone.new_init(settings.initial_zone);
+        current_zone = mem::new(Zone);
+        current_zone.new_init(settings.initial_zone);
     }
 
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Starting game loop...");
@@ -145,10 +145,10 @@ fn void launch(RLGame game)
 
             gui::gui_data.start_frame();
 
-            if (zone)
+            if (current_zone)
             {
-                zone.update(game);
-                zone.render_zone(map_term);
+                current_zone.update(game);
+                current_zone.render_zone(map_term);
             }
 
             game.render();
