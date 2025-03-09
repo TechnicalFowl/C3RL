@@ -1,5 +1,7 @@
 module c3rl;
 
+import std::math;
+
 fn void test_ivec2_sign() @test
 {
     assert(IVec2{-3, -2}.sign() == {-1, -1});
@@ -21,6 +23,27 @@ fn void test_ivec2_distance() @test
     assert(IVec2{4, 5}.distance(IVec2{0, 1}) == 8);
     assert(IVec2{-2, 8}.distance(IVec2{1, 2}) == 9);
     assert(IVec2{4, 0}.distance(IVec2{2, 1}) == 3);
+}
+
+fn void test_ivec2_fdistance() @test
+{
+    assert(IVec2{0, 0}.fdistance(IVec2{0, 0}) == 0);
+    assert(IVec2{0, 0}.fdistance(IVec2{1, 1}) == math::sqrt(2));
+    assert(IVec2{0, 0}.fdistance(IVec2{1, 0}) == 1);
+    assert(IVec2{0, 0}.fdistance(IVec2{0, 1}) == 1);
+    assert(IVec2{4, 5}.fdistance(IVec2{0, 1}) == math::sqrt(32));
+    assert(IVec2{-2, 8}.fdistance(IVec2{1, 2}) == math::sqrt(45));
+    assert(IVec2{4, 0}.fdistance(IVec2{2, 1}) == math::sqrt(5));
+}
+
+fn void test_ivec2_clamp() @test
+{
+    assert(IVec2{0, 0}.clamp(IVec2{1, 1}, IVec2{2, 2}) == {1, 1});
+    assert(IVec2{0, 0}.clamp(IVec2{-1, -1}, IVec2{2, 2}) == {0, 0});
+    assert(IVec2{0, 0}.clamp(IVec2{-1, 1}, IVec2{2, 2}) == {0, 1});
+    assert(IVec2{0, 0}.clamp(IVec2{1, -1}, IVec2{2, 2}) == {1, 0});
+    assert(IVec2{0, 0}.clamp(IVec2{1, 1}, IVec2{0, 0}) == {0, 0});
+    assert(IVec2{0, 0}.clamp(IVec2{0, 0}, IVec2{0, 0}) == {0, 0});
 }
 
 fn void test_bitboard() @test

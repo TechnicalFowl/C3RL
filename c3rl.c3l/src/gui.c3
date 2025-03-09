@@ -6,7 +6,7 @@ import std::io;
 
 import raylib5::rl;
 
-import c3rl::colors;
+import c3rl;
 
 enum GuiSetting
 {
@@ -111,7 +111,7 @@ fn void push_bottombar(String text)
     }
 }
 
-fn void begin_window(String title, IVec2 pos, IVec2 size, bool border=true)
+fn GuiWindow* begin_window(String title, IVec2 pos, IVec2 size, bool border=true, int priority=0)
 {
     GuiWindow* window;
     if (try GuiWindow* w = gui_data.windows.get(title))
@@ -129,24 +129,27 @@ fn void begin_window(String title, IVec2 pos, IVec2 size, bool border=true)
     window.flags = 0;
     if (border) window.flags |= WINDOW_FLAG_BORDER;
     window.last_frame = gui_data.frame_index;
+    if (window.open_frame == 0) window.open_frame = gui_data.frame_index;
     window.cursor = {pos[0] * 2, pos[1] };
     window.last_end = window.cursor;
     window.newline_start = window.cursor[0];
+    window.priority = priority;
 
     int prio = get_setting(GuiSetting.PRIORITY);
-    c3rl::terminal.fill_background(...pos, ...size, get_color(GuiColor.WINDOW_BG), prio);
+    c3rl::ui_term.fill_background(...pos, ...size, get_color(GuiColor.WINDOW_BG), prio);
     if (border)
     {
-        c3rl::terminal.box_text(pos[0] * 2, pos[1], size[0] * 2, size[1], double_lines: false, fg: get_color(GuiColor.WINDOW_BORDER), priority: prio);
-        c3rl::terminal.fill_text(pos[0] * 2 + 5, pos[1], (int) title.len + 2, 1, ' ', colors::WHITE, prio);
-        c3rl::terminal.set_text(pos[0] * 2 + 4, pos[1], 180, get_color(GuiColor.WINDOW_BORDER), prio);
-        c3rl::terminal.write(pos[0] * 2 + 6, pos[1], title, get_color(GuiColor.WINDOW_BORDER), prio);
-        c3rl::terminal.set_text(pos[0] * 2 + 7 + (int) title.len, pos[1], 195, get_color(GuiColor.WINDOW_BORDER), prio);
+        c3rl::ui_term.box_tile(...pos, ...size, double_lines: false, fg: get_color(GuiColor.WINDOW_BORDER), priority: prio);
+        c3rl::ui_term.fill_tile(pos.x + 5, pos.y, (int) title.len + 2, 1, ' ', colors::WHITE, prio);
+        c3rl::ui_term.set_tile(pos.x + 4, pos.y, 180, get_color(GuiColor.WINDOW_BORDER), prio);
+        c3rl::ui_term.write(pos.x + 6, pos.y, title, get_color(GuiColor.WINDOW_TEXT), prio);
+        c3rl::ui_term.set_tile(pos.x + 7 + (int) title.len, pos[1], 195, get_color(GuiColor.WINDOW_BORDER), prio);
         window.cursor = window.cursor + {1, 1};
         window.newline_start++;
     }
 
     gui_data.window_stack.push(window);
+    return window;
 }
 
 fn void same_line(int x = 1)
@@ -156,6 +159,13 @@ fn void same_line(int x = 1)
     window.cursor = window.last_end + {x, 0};
 }
 
+fn void vertical_separator(int y)
+{
+    if (gui_data.window_stack.is_empty()) unreachable("No window to write to");
+    GuiWindow* window = gui_data.window_stack.last()!!;
+    window.cursor = { window.newline_start, window.cursor.y + y };
+}
+
 fn void text(String text, rl::Color color=colors::BLANK)
 {
     if (color == colors::BLANK) color = get_color(GuiColor.WINDOW_TEXT);
@@ -163,33 +173,63 @@ fn void text(String text, rl::Color color=colors::BLANK)
     GuiWindow* window = gui_data.window_stack.last()!!;
     IVec2 clip_size = window.get_text_clip_size();
     if (clip_size[0] <= 0 || clip_size[1] <= 0) return;
-    int prio = get_setting(GuiSetting.PRIORITY);
+    int prio = get_setting(GuiSetting.PRIORITY) + window.priority;
     String clip_text = text.len > clip_size[0] ? text[..clip_size[0]] : text;
-    c3rl::terminal.write(...window.cursor, clip_text, color, prio);
+    c3rl::ui_term.write(...window.cursor, clip_text, color, prio);
+    window.last_start = window.cursor;
     window.last_end = window.cursor + {clip_text.len, 0};
     window.cursor = { window.newline_start, window.cursor[1] + 1 };
 }
 
-fn bool button(String next, rl::KeyboardKey shortcut=0, rl::Color color=colors::BLANK)
+fn void icon(game::Appearance look)
+{
+    if (gui_data.window_stack.is_empty()) unreachable("No window to write to");
+    GuiWindow* window = gui_data.window_stack.last()!!;
+    int prio = get_setting(GuiSetting.PRIORITY) + window.priority;
+    bool textmode = c3rl::is_textmode || look.info.sprite_index < 0;
+    char gl = textmode ? look.info.glyph : (char) look.info.sprite_index;
+    rl::Color color = textmode ? look.info.color : colors::WHITE;
+    c3rl::ui_term.set_tile(...window.cursor, gl, color, prio + 1, textmode ? c3rl::root_font : c3rl::root_sprite_font);
+    window.cursor.x += 2;
+}
+
+fn bool[2] buttonBehavior(IVec2 pos, int length, rl::KeyboardKey shortcut=0, bool disabled=false)
+{
+    if (gui_data.window_stack.is_empty()) unreachable("No window to write to");
+    GuiWindow* window = gui_data.window_stack.last()!!;
+    int x = rl::getMouseX() / (c3rl::settings.default_font_size / 2);
+    int y = rl::getMouseY() / c3rl::settings.default_font_size;
+    bool hovered = x >= pos.x && x < pos.x + length && y == pos.y && !disabled;
+    bool can_receive_input = !disabled && gui_data.can_receive_input(window) && window.open_frame < gui_data.frame_index - 1;
+    bool pressed = hovered && can_receive_input && rl::isMouseButtonPressed(rl::MouseButton.LEFT);
+    if (can_receive_input && shortcut != 0 && rl::isKeyPressed(shortcut)) pressed = true;
+    return {hovered, pressed};
+}
+
+fn bool button(String next, rl::KeyboardKey shortcut=0, rl::Color color=colors::BLANK, bool disabled=false)
 {
     if (color == colors::BLANK) color = get_color(GuiColor.WINDOW_TEXT);
     if (gui_data.window_stack.is_empty()) unreachable("No window to write to");
-    String shortcut_name = shortcut != 0 ? string::tformat("%c: ", (int) shortcut) : "";
-    String text = string::tformat("[%s%s]", shortcut_name, next);
+    String shortcut_name = shortcut != 0 ? string::tformat("%3s: ", c3rl::getKeyName(shortcut)) : "";
+    String text = string::tformat("%s%s", shortcut_name, next);
     GuiWindow* window = gui_data.window_stack.last()!!;
     IVec2 clip_size = window.get_text_clip_size();
     if (clip_size[0] <= 0 || clip_size[1] <= 0) return false;
+    String clip_text = text.len > clip_size[0] ? text[..clip_size[0]] : text;
+    int btn_w = clip_text.len;
 
     int x = rl::getMouseX() / (c3rl::settings.default_font_size / 2);
     int y = rl::getMouseY() / c3rl::settings.default_font_size;
-    bool hovered = x >= window.cursor.x && x < window.cursor.x + clip_size.x && y == window.cursor.y;
+    bool hovered = x >= window.cursor.x && x < window.cursor.x + btn_w && y == window.cursor.y && !disabled;
     if (hovered) color = get_color(GuiColor.HOVERED_TEXT);
-    bool pressed = hovered && rl::isMouseButtonPressed(rl::MouseButton.LEFT);
-    if (gui_data.can_receive_input(window) && shortcut != 0 && rl::isKeyPressed(shortcut)) pressed = true;
+    if (disabled) color = colors::DARK_GREY;
+    bool can_receive_input = !disabled && gui_data.can_receive_input(window) && window.open_frame < gui_data.frame_index - 1;
+    bool pressed = hovered && can_receive_input && rl::isMouseButtonPressed(rl::MouseButton.LEFT);
+    if (can_receive_input && shortcut != 0 && rl::isKeyPressed(shortcut)) pressed = true;
 
-    int prio = get_setting(GuiSetting.PRIORITY);
-    String clip_text = text.len > clip_size[0] ? text[..clip_size[0]] : text;
-    c3rl::terminal.write(...window.cursor, clip_text, color, prio);
+    int prio = get_setting(GuiSetting.PRIORITY) + window.priority;
+    c3rl::ui_term.write(...window.cursor, clip_text, color, prio);
+    window.last_start = window.cursor;
     window.last_end = window.cursor + {clip_text.len, 0};
     window.cursor = { window.newline_start, window.cursor[1] + 1 };
 
@@ -199,6 +239,18 @@ fn bool button(String next, rl::KeyboardKey shortcut=0, rl::Color color=colors::
 fn void end_window()
 {
     if (catch gui_data.window_stack.pop()) unreachable("No window to end");
+}
+
+fn bool is_popup_open(String title)
+{
+    foreach (w: gui_data.popup_stack)
+    {
+        if (w == title)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn void open_popup(String title)
@@ -228,7 +280,9 @@ fn bool begin_popup(String title, IVec2 pos, IVec2 size, bool border=true)
     {
         return false;
     }
-    begin_window(title, pos, size, border);
+    int prio = (int) (gui_data.popup_stack.index_of(title) ?? 0) * 2 + 1;
+    GuiWindow* w = begin_window(title, pos, size, border, prio);
+    w.flags |= WINDOW_FLAG_POPUP;
     return true;
 }
 
@@ -245,20 +299,20 @@ fn void end_popup()
 
 fn bool want_mouse_input()
 {
-    int x = rl::getMouseX() / c3rl::settings.default_font_size;
+    int x = rl::getMouseX() / (c3rl::settings.default_font_size / 2);
     int y = rl::getMouseY() / c3rl::settings.default_font_size;
-    return is_in_window({x, y});
+    return is_in_window({x, y}) || !gui_data.popup_stack.is_empty();
 }
 
 fn bool want_key_input()
 {
-    return gui_data.can_receive_input(null);
+    return !gui_data.can_receive_input(null);
 }
 
 fn bool is_in_window(IVec2 pos)
 {
     if (gui_data.had_topbar && pos[1] == 0) return true;
-    if (gui_data.had_statusbar && pos[1] == c3rl::terminal.height - 1) return true;
+    if (gui_data.had_statusbar && pos[1] == c3rl::ui_term.height - 1) return true;
     gui_data.windows.@each(; String key, GuiWindow* window)
     {
         if (window.last_frame >= gui_data.frame_index - 1 &&
@@ -269,15 +323,6 @@ fn bool is_in_window(IVec2 pos)
     };
     return false;
 }
-
-module c3rl::gui @private;
-
-import std::collections::list;
-import std::collections::map;
-
-import raylib5::rl;
-
-import c3rl::colors;
 
 const WINDOW_FLAG_BORDER = 1 << 0;
 const WINDOW_FLAG_POPUP = 1 << 1;
@@ -290,10 +335,14 @@ struct GuiWindow
     uint flags;
 
     ulong last_frame;
+    ulong open_frame;
 
     IVec2 cursor;
+    IVec2 last_start;
     IVec2 last_end;
     int newline_start;
+
+    int priority;
 }
 
 fn bool GuiWindow.border(&self) => (self.flags & WINDOW_FLAG_BORDER) != 0;
@@ -301,7 +350,7 @@ fn bool GuiWindow.border(&self) => (self.flags & WINDOW_FLAG_BORDER) != 0;
 fn IVec2 GuiWindow.get_clip_size(&self)
 {
     return {
-        self.size[0] - (self.cursor[0] / 2 - self.pos[0]),
+        self.size[0] - (self.cursor[0] - self.pos[0]),
         self.size[1] - (self.cursor[1] - self.pos[1]),
     };
 }
@@ -309,7 +358,7 @@ fn IVec2 GuiWindow.get_clip_size(&self)
 fn IVec2 GuiWindow.get_text_clip_size(&self)
 {
     return {
-        self.size[0] * 2 - (self.border() ? 1 : 0) - (self.cursor[0] - self.pos[0] * 2),
+        self.size[0] - (self.border() ? 1 : 0) - (self.cursor[0] - self.pos[0] * 2),
         self.size[1] - (self.cursor[1] - self.pos[1]),
     };
 }
@@ -372,8 +421,8 @@ fn bool GuiData.can_receive_input(&self, GuiWindow* window)
 {
     if (window && window.flags & WINDOW_FLAG_POPUP)
     {
-        assert(!gui_data.popup_stack.is_empty(), "No popup to receive input");
-        return gui_data.popup_stack.last()!! == window.title;
+        if (self.popup_stack.is_empty()) return false;
+        return self.popup_stack.last()!! == window.title;
     }
     return self.popup_stack.is_empty();
 }
@@ -390,13 +439,13 @@ fn void GuiData.render(&self)
 {
     assert(self.window_stack.is_empty(), "Unclosed windows");
     int prio = get_setting(GuiSetting.PRIORITY);
-    int term_width = c3rl::terminal.width;
-    int term_height = c3rl::terminal.height;
+    int term_width = c3rl::ui_term.width;
+    int term_height = c3rl::ui_term.height;
 
     if (self.topbar.len != 0)
     {
-        c3rl::terminal.fill_background(0, 0, term_width, 1, get_color(GuiColor.TOP_BAR_BG), prio);
-        c3rl::terminal.write(1, 0, self.topbar, get_color(GuiColor.TOP_BAR_TEXT), prio);
+        c3rl::ui_term.fill_background(0, 0, term_width, 1, get_color(GuiColor.TOP_BAR_BG), prio);
+        c3rl::ui_term.write(1, 0, self.topbar, get_color(GuiColor.TOP_BAR_TEXT), prio);
         gui_data.had_topbar = true;
     }
     else
@@ -405,12 +454,20 @@ fn void GuiData.render(&self)
     }
     if (self.statusbar.len != 0)
     {
-        c3rl::terminal.fill_background(0, term_height - 1, term_width, 1, get_color(GuiColor.BOTTOM_BAR_BG), prio);
-        c3rl::terminal.write(1, term_height - 1, self.statusbar, get_color(GuiColor.BOTTOM_BAR_TEXT), prio);
+        c3rl::ui_term.fill_background(0, term_height - 1, term_width, 1, get_color(GuiColor.BOTTOM_BAR_BG), prio);
+        c3rl::ui_term.write(1, term_height - 1, self.statusbar, get_color(GuiColor.BOTTOM_BAR_TEXT), prio);
         gui_data.had_statusbar = true;
     }
     else
     {
         gui_data.had_statusbar = false;
     }
+    
+    self.windows.@each(; String name, GuiWindow* window)
+    {
+        if (window.last_frame < self.frame_index - 2)
+        {
+            window.open_frame = 0;
+        }
+    };
 }

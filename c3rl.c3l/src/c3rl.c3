@@ -9,22 +9,16 @@ import c3rl::gui @public;
 import c3rl::internal @public;
 
 Font* root_font;
+Font* root_sprite_font;
 Font* root_hfont;
+bool is_textmode;
+
 bool taking_screenshot = false;
 String screenshot_filename;
 RLSettings settings;
 
-struct LogMessage
-{
-    String message;
-    rl::Color color;
-}
-List(<LogMessage>) log_messages;
-
-fn void log(String message, rl::Color color = colors::WHITE)
-{
-    log_messages.push({message, color});
-}
+VirtualTerminal* map_term;
+VirtualTerminal* ui_term;
 
 struct RLSettings
 {
@@ -65,6 +59,8 @@ interface RLGame
     fn void update(double time) @optional; // Called after a player action
     fn ZoneRenderSettings pre_render() @optional; // Called before rendering the zone
     fn void render(); // Called every frame, happends after the zone is rendered
+
+    fn Entity get_player();
 }
 
 interface ResizeEvent
@@ -105,13 +101,18 @@ fn void launch(RLGame game)
     }
     root_hfont = hfont;
 
-    terminal = mem::new(VirtualTerminal);
-    terminal.new_init(settings.terminal_width, settings.terminal_height);
+    map_term = mem::new(VirtualTerminal);
+    map_term.new_init(settings.terminal_width, settings.terminal_height, root_font);
+    ui_term = mem::new(VirtualTerminal);
+    ui_term.new_init(settings.terminal_width * 2, settings.terminal_height, root_hfont);
+
+    Zone* zone;
 
     if (settings.initial_zone.width != 0)
     {
         rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Loading Zone...");
-        load_zone(settings.initial_zone);
+        zone = mem::new(Zone);
+        zone.new_init(settings.initial_zone);
     }
 
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Starting game loop...");
@@ -129,28 +130,32 @@ fn void launch(RLGame game)
             {
                 int new_width = rl::getScreenWidth();
                 int new_height = rl::getScreenHeight();
-                @call_event(ResizeEvent, on_resize, terminal, new_width, new_height);
+                @call_event(ResizeEvent, on_resize, map_term, new_width / root_font.width, new_height / root_font.height);
+                @call_event(ResizeEvent, on_resize, ui_term, new_width / root_hfont.width, new_height / root_font.height);
                 @call_event(ResizeEvent, on_resize, game, new_width, new_height);
             }
 
             rl::beginDrawing();
             rl::clearBackground(colors::BLACK);
+            
+            update_inputs();
 
-            terminal.clear(colors::BLACK);
+            map_term.clear(colors::BLACK);
+            ui_term.clear(colors::BLACK);
 
             gui::gui_data.start_frame();
 
             if (zone)
             {
                 zone.update(game);
-                ZoneRenderSettings render_settings = &game.pre_render? game.pre_render() : {};
-                zone.render(terminal, render_settings);
+                zone.render_zone(map_term);
             }
 
             game.render();
             gui::gui_data.render();
 
-            terminal.render();
+            map_term.render(1, {});
+            ui_term.render(1, {});
 
             rl::endDrawing();
 

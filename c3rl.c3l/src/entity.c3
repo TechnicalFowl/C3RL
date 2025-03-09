@@ -11,6 +11,11 @@ interface PostLoadEvent
     fn void on_post_load() @optional;
 }
 
+interface OnDeadEvent
+{
+    fn void on_dead() @optional;
+}
+
 macro @call_event($Type, #func, any e, ...)
 {
     $Type h = ($Type) e;
@@ -50,8 +55,8 @@ fn void MoveAction.apply(&self, Entity entity) @dynamic
 {
     IVec2 new_pos = entity.get_position() + self.move;
 
-    ZoneCell* cell = entity.get_zone().get_cell(...new_pos);
-    if (cell.terrain.passable)
+    ZoneCell*! cell = entity.get_zone().get_cell(...new_pos);
+    if (cell.is_passable() ?? false)
     {
         entity.set_position(new_pos);
     }
@@ -72,82 +77,26 @@ interface Entity
     fn String get_name();
     fn IVec2 get_position();
     fn void set_position(IVec2 pos);
-    fn char get_glyph();
-    fn rl::Color get_color();
+    fn bool is_dead();
+
+    fn Appearance get_look();
+
     fn double get_idle_time();
     fn void give_idle_time(double time);
 
     fn Action next_action(double max_time);
+
+    fn void on_update(double delta_time);
+    fn void on_render(VirtualTerminal* terminal, IVec2 term_pos);
 }
 
-struct EntityCommon (Entity)
+fn void entity_set_position(Entity self, IVec2 new_pos)
 {
-    Zone* zone;
-    String name;
-    IVec2 position;
-    char glyph;
-    rl::Color color;
-
-    double idle_time;
-}
-
-fn Zone* EntityCommon.get_zone(&self) @dynamic => self.zone;
-fn String EntityCommon.get_name(&self) @dynamic => self.name;
-fn IVec2 EntityCommon.get_position(&self) @dynamic => self.position;
-fn void EntityCommon.set_position(&self, IVec2 pos) @dynamic
-{
-    ZoneCell* cell = self.zone.get_cell(...self.position);
-    Entity this_ent;
-    foreach (ent: cell.entities)
-    {
-        if (ent.ptr == self)
-        {
-            this_ent = ent;
-            break;
-        }
-    }
-    cell.entities.remove_first_item(this_ent);
-    self.position = pos;
-    ZoneCell* new_cell = self.zone.get_cell(...self.position);
-    new_cell.entities.push(this_ent);
-}
-
-fn char EntityCommon.get_glyph(&self) @dynamic => self.glyph;
-fn rl::Color EntityCommon.get_color(&self) @dynamic => self.color;
-fn double EntityCommon.get_idle_time(&self) @dynamic => self.idle_time;
-fn void EntityCommon.give_idle_time(&self, double time) @dynamic
-{
-    self.idle_time += time;
-}
-
-/*
-This would be cool
-macro @pass($Type, #func)
-{
-    fn $typeof(Entity.#func()) $Type.#name(&self) @dynamic => self.entity.#func();
-}
-*/
-
-fn void EntityCommon.new_init(&self, Zone* z, String n, IVec2 p, char g, rl::Color c)
-{
-    self.zone = z;
-    self.name = n;
-    self.position = p;
-    self.glyph = g;
-    self.color = c;
-}
-
-fn void EntityCommon.free(&self) @dynamic
-{
-    self.name.free();
-}
-
-fn Action EntityCommon.next_action(&self, double max_time) @dynamic
-{
-    if (max_time <= 0) return null;
-    WaitAction* wait = mem::temp_alloc(WaitAction);
-    wait.time = max_time - self.idle_time;
-    return wait;
+    Zone* zone = self.get_zone();
+    ZoneCell* cell = zone.get_cell(...self.get_position())!!;
+    cell.entities.remove_item(self);
+    ZoneCell* new_cell = zone.get_cell(...new_pos)!!;
+    new_cell.entities.push(self);
 }
 
 struct Navigator
@@ -198,8 +147,8 @@ struct VisibilityTracker
 fn void VisibilityTracker.new_init(&self, Zone* z)
 {
     self.zone = z;
-    self.visible.new_init(z.width, z.height);
-    self.explored.new_init(z.width, z.height);
+    self.visible.new_init(...z.size);
+    self.explored.new_init(...z.size);
 }
 
 fn void VisibilityTracker.free(&self)
@@ -219,7 +168,7 @@ fn bool VisibilityTrackerCB.line_cb(&self, IVec2 pos) @private
 {
     self.vis.set_visible(pos, true);
     self.vis.set_explored(pos, true);
-    return self.step++ < self.range && self.vis.zone.get_cell(...pos).terrain.passable;
+    return self.step++ < self.range && self.vis.zone.get_cell(...pos).is_passable() ?? false;
 }
 
 fn void VisibilityTracker.sweep_line(&self, IVec2 from, IVec2 to)

@@ -94,8 +94,8 @@ fn void CellularAutomata.apply(&self, BitBoard* in, BitBoard* out, int r1, int r
 
 fn BitBoard CellularAutomata.get_shape(&self, Zone* zone, Random rng)
 {
-    int w = zone.width;
-    int h = zone.height;
+    int w = zone.size.x;
+    int h = zone.size.y;
 
     BitBoard board1;
     board1.new_init(w, h);
@@ -127,22 +127,22 @@ fn BitBoard CellularAutomata.get_shape(&self, Zone* zone, Random rng)
     return board1;
 }
 
-fn void CellularAutomata.generate(&self, Zone* zone, Random rng)
+fn void CellularAutomata.generate(&self, Zone* zone, Random rng, game::Terrain wall, game::Terrain floor)
 {
     BitBoard board = self.get_shape(zone, rng);
     defer board.free();
 
-    for (int y = 0; y < zone.height; ++y)
+    for (int y = 0; y < zone.size.y; ++y)
     {
-        for (int x = 0; x < zone.width; ++x)
+        for (int x = 0; x < zone.size.x; ++x)
         {
-            if (x == 0 || x == zone.width - 1 || y == 0 || y == zone.height -1 || board.get({x, y}))
+            if (x == 0 || x == zone.size.x - 1 || y == 0 || y == zone.size.y -1 || board.get({x, y}))
             {
-                zone.set_terrain(x, y, '#', colors::DARK_GREY.randomize(rng, 0.1), colors::BLACK, false);
+                zone.set_terrain(x, y, wall);
             }
             else
             {
-                zone.set_terrain(x, y, '.', colors::DARKEST_GREY.randomize(rng, 0.2), colors::BLACK, true);
+                zone.set_terrain(x, y, floor);
             }
         }
     }

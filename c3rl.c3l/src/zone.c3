@@ -8,33 +8,95 @@ import std::math;
 
 import raylib5::rl;
 
-Zone* zone;
+const uint TERRAIN_FLAG_PASSABLE = 1 << 0;
 
-struct ZoneTerrain
+struct TerrainInfo
 {
-    char glyph;
-    rl::Color fg;
-    rl::Color bg;
-    bool passable;
+    String name;
+    uint flags;
+    Appearance look;
+    String description;
+}
+
+fn bool TerrainInfo.is_passable(&self) => (self.flags & TERRAIN_FLAG_PASSABLE) != 0;
+
+const uint OBJECT_FLAG_PASSABLE = 1 << 0;
+
+interface ObjectBehavior
+{
+
+}
+
+struct ObjectInfo
+{
+    String name;
+    uint flags;
+    Appearance look;
+    String description;
+    ObjectBehavior behavior;
+}
+
+fn bool ObjectInfo.is_passable(&self) => (self.flags & OBJECT_FLAG_PASSABLE) != 0;
+
+fault ZoneFault
+{
+    OUT_OF_BOUNDS,
 }
 
 struct ZoneCell
 {
-    ZoneTerrain terrain;
+    game::Terrain terrain;
+    game::Object object;
+    //List(<ItemStack>) items;
     List(<Entity>) entities;
+}
+
+fn bool ZoneCell.is_passable(&self) => self.terrain.info.is_passable() && self.object.info.is_passable();
+
+def ZoneGenerator = fn void(void* data, Zone* zone);
+struct ZoneDescription
+{
+    String name;
+    int width;
+    int height;
+
+    ZoneGenerator generator;
+    void* generator_data;
+}
+
+<*
+@require width > 0: "Zone width must be greater than 0"
+@require height > 0: "Zone height must be greater than 0"
+*>
+fn void ZoneDescription.new_init(&self, String name, int width, int height)
+{
+    self.name = name;
+    self.width = width;
+    self.height = height;
+}
+
+struct ZoneRenderSettings
+{
+    int map_zoom;
+    IVec2 center;
+    IVec2 screen_center;
+    IVec2 pixel_offset;
+    VisibilityTracker* camera_visibility;
 }
 
 struct Zone
 {
     String name;
-    int width;
-    int height;
+    IVec2 size;
     ZoneCell* cells;
 
-    Entity player;
     List(<Entity>) all_entities;
 
+    ZoneRenderSettings render;
+
     IVec2 last_render_min;
+    IVec2 last_mouse_pos;
+    double mouse_hover_time;
 }
 
 <*
@@ -44,31 +106,33 @@ struct Zone
 fn void Zone.new_init(&self, ZoneDescription desc)
 {
     self.name = desc.name;
-    self.width = desc.width;
-    self.height = desc.height;
-    self.cells = mem::new_array(ZoneCell, (usz) self.width * self.height);
+    self.size = {desc.width, desc.height};
+    self.cells = mem::new_array(ZoneCell, (usz) self.size.x * self.size.y);
 
-    for (int i = 0; i < self.width * self.height; ++i)
+    for (int i = 0; i < self.size.x * self.size.y; ++i)
     {
         ZoneCell* cell = &self.cells[i];
-        cell.terrain = { ' ', colors::WHITE, colors::BLACK, true };
+        cell.terrain = Terrain.from_ordinal(0);
+        cell.object = Object.from_ordinal(0);
         cell.entities.new_init();
     }
 
-    desc.generator(desc.generator_data, self);
+    if (desc.generator)
+    {
+        desc.generator(desc.generator_data, self);
+    }
 
-    assert(self.player != null, "No player provided");
-
-    @call_event(PostLoadEvent, on_post_load, self.player);
     foreach (ent: self.all_entities)
     {
         @call_event(PostLoadEvent, on_post_load, ent);
     }
+
+    self.render.map_zoom = 1;
 }
 
 fn void Zone.free(&self)
 {
-    for (int i = 0; i < self.width * self.height; ++i)
+    for (int i = 0; i < self.size.x * self.size.y; ++i)
     {
         self.cells[i].entities.free();
     }
@@ -100,17 +164,19 @@ fn EntityAction* make_entity_action(Entity e, Action act, double duration, doubl
     return ea;
 }
 
-fn void Zone.update(&self, RLGame game)
+fn double Zone.update(&self, RLGame game)
 {
     @pool()
     {
-        Action player_action = self.player.next_action(100000);
-        if (player_action == null) return;
+        Entity player = game.get_player();
+        if (player == null) return 0.0;
+        Action player_action = player.next_action(100000);
+        if (player_action == null) return 0.0;
 
         double max_time = player_action.duration();
         PriorityQueue(<EntityAction*>) actions;
         actions.new_init(math::max(self.all_entities.len() + 1u64, 16u64), allocator::temp());
-        actions.push(make_entity_action(self.player, player_action, max_time, 0));
+        actions.push(make_entity_action(player, player_action, max_time, 0));
 
         foreach (ent: self.all_entities)
         {
@@ -134,35 +200,57 @@ fn void Zone.update(&self, RLGame game)
         }
 
         if (&game.update) game.update(max_time);
+
+        for (int i = (int) self.all_entities.len() - 1; i >= 0; --i)
+        {
+            Entity e = self.all_entities[i];
+            if (e.is_dead())
+            {
+                @call_event(OnDeadEvent, on_dead, e);
+
+                ZoneCell* cell = self.get_cell(...e.get_position())!!;
+                cell.entities.remove_item(e);
+                self.all_entities.remove_at(i);
+                e.free();
+                mem::free(e);
+            }
+            else
+            {
+                e.on_update(max_time);
+            }
+        }
+
+        return max_time;
     };
 }
 
-<*
-@require x >= 0, x < self.width: "Position x out of bounds"
-@require y >= 0, y < self.height: "Position y out of bounds"
-*>
-fn ZoneCell* Zone.get_cell(&self, int x, int y)
+fn ZoneCell*! Zone.get_cell(&self, int x, int y)
 {
-    return &self.cells[y * self.width + x];
+    if (x < 0 || x >= self.size.x || y < 0 || y >= self.size.y) return ZoneFault.OUT_OF_BOUNDS?;
+    return &self.cells[y * self.size.x + x];
 }
 
-fn void Zone.set_terrain(&self, int x, int y, char glyph, rl::Color fg, rl::Color bg, bool passable)
+fn void Zone.set_terrain(&self, int x, int y, game::Terrain terr)
 {
-    ZoneCell* cell = self.get_cell(x, y);
-    cell.terrain.glyph = glyph;
-    cell.terrain.fg = fg;
-    cell.terrain.bg = bg;
-    cell.terrain.passable = passable;
+    ZoneCell* cell = self.get_cell(x, y)!!;
+    cell.terrain = terr;
 }
 
-<*
-@param [&in] e
-*>
-fn void Zone.add_player(&self, Entity e)
+fn void Zone.fill_terrain(&self, IVec2 pos, IVec2 size, game::Terrain terr)
 {
-    self.player = e;
-    ZoneCell* cell = self.get_cell(...e.get_position());
-    cell.entities.push(e);
+    for (int y = pos.y; y < pos.y + size.y; ++y)
+    {
+        for (int x = pos.x; x < pos.x + size.x; ++x)
+        {
+            self.set_terrain(x, y, terr);
+        }
+    }
+}
+
+fn void Zone.set_object(&self, int x, int y, game::Object obj)
+{
+    ZoneCell* cell = self.get_cell(x, y)!!;
+    cell.object = obj;
 }
 
 <*
@@ -171,20 +259,20 @@ fn void Zone.add_player(&self, Entity e)
 fn void Zone.add_entity(&self, Entity e)
 {
     self.all_entities.push(e);
-    ZoneCell* cell = self.get_cell(...e.get_position());
+    ZoneCell* cell = self.get_cell(...e.get_position())!!;
     cell.entities.push(e);
-}
-
-fn IVec2 Zone.get_player_position(&self)
-{
-    assert(self.player != null, "No player in zone");
-    return self.player.get_position();
 }
 
 fn IVec2 Zone.get_mouse_position(&self)
 {
-    int x = self.last_render_min[0] + rl::getMouseX() / settings.default_font_size;
-    int y = self.last_render_min[1] + rl::getMouseY() / settings.default_font_size;
+    return self.pixel_to_cell({ rl::getMouseX(), rl::getMouseY() });
+}
+
+fn IVec2 Zone.pixel_to_cell(&self, IVec2 pos)
+{
+    Font* font = is_textmode ? root_font : root_sprite_font;
+    int x = self.last_render_min.x + (pos.x - self.render.pixel_offset.x) / (font.width * self.render.map_zoom);
+    int y = self.last_render_min.y + (pos.y - self.render.pixel_offset.y) / (font.height * self.render.map_zoom);
     return {x, y};
 }
 
@@ -197,7 +285,7 @@ fn IVec2 Zone.find_nearest_empty(&self, IVec2 pos)
     const int RANGE = 10;
     for (int i = 0; i < RANGE * RANGE * 4; ++i)
     {
-        if (self.get_cell(pos[0] + x, pos[1] + y).terrain.passable) return pos;
+        if (self.get_cell(pos.x + x, pos.y + y).is_passable() ?? false) return pos;
         if  (x == y || ((x < 0) && (x == -y)) || ((x > 0) && (x == 1 - y)))
         {
             int t = dx;
@@ -210,54 +298,94 @@ fn IVec2 Zone.find_nearest_empty(&self, IVec2 pos)
     return pos;
 }
 
-struct ZoneRenderSettings
+struct ZoneVisCB
 {
-    IVec2 offset;
+    Zone* zone;
+    bool visible;
 }
+
+fn bool ZoneVisCB.line_cb(&self, IVec2 pos) @private
+{
+    ZoneCell*! cell = self.zone.get_cell(...pos);
+    if (!cell.is_passable() ?? true)
+    {
+        self.visible = false;
+        return false;
+    }
+    return true;
+}
+
+fn bool Zone.can_see(&self, IVec2 from, IVec2 to)
+{
+    ZoneVisCB cb_data = { self, true };
+    line(from, to, (LineCallback) &ZoneVisCB.line_cb, &cb_data);
+    return cb_data.visible;
+}
+
 
 <*
 @param [&in] term
 *>
-fn void Zone.render(&self, VirtualTerminal* term, ZoneRenderSettings settings)
+fn void Zone.render_zone(&self, VirtualTerminal* term)
 {
-    IVec2 hsize = {terminal.width / 2, terminal.height / 2};
-    IVec2 focus = hsize;
-    if (self.player) focus = self.get_player_position();
-    focus += settings.offset;
+    IVec2 hsize = {term.width / 2, term.height / 2};
+    IVec2 focus = self.render.center;
 
     IVec2 min = focus - hsize;
     IVec2 max = focus + hsize;
 
     self.last_render_min = min;
-
-    VisibilityTracker* vis = null;
-    EntityVisibility ev = (EntityVisibility) self.player;
-    if (&ev.get_visibility)
-    {
-        vis = ev.get_visibility();
-    }
+    
+    Font* font = is_textmode ? root_font : root_sprite_font;
 
     for (int y = min[1]; y < max[1]; ++y)
     {
-        if (y < 0 || y >= self.height) continue;
+        if (y < 0 || y >= self.size.y) continue;
         int term_y = y - min[1];
         for (int x = min[0]; x < max[0]; ++x)
         {
-            if (x < 0 || x >= self.width) continue;
-            if (vis != null && !vis.is_explored({x, y})) continue;
+            if (x < 0 || x >= self.size.x) continue;
+            if (self.render.camera_visibility != null && !self.render.camera_visibility.is_explored({x, y})) continue;
             int term_x = x - min[0];
-            ZoneCell* cell = &self.cells[x + y * self.width];
-            ZoneTerrain terr = cell.terrain;
-            bool is_visible = vis == null || vis.is_visible({x, y});
-            term.set_background(term_x, term_y, is_visible ? terr.bg : terr.bg.grayscale().darken(0.4f));
-            if (cell.entities.is_empty() || !is_visible)
+            ZoneCell* cell = &self.cells[x + y * self.size.x];
+            bool is_visible = self.render.camera_visibility == null || self.render.camera_visibility.is_visible({x, y});
+            
+            if (cell.terrain.ordinal != 0)
             {
-                term.set_tile(term_x, term_y, terr.glyph, is_visible ? terr.fg : terr.fg.grayscale().darken(0.4f));
+                TerrainInfo terr = cell.terrain.info;
+                AppearanceInfo look = terr.look.info;
+                bool textmode = is_textmode || look.sprite_index < 0;
+                char gl = textmode ? look.glyph : (char) look.sprite_index;
+                rl::Color color = textmode ? look.color : rl::WHITE;
+                if (!is_visible)
+                {
+                    color = color.grayscale().darken(0.4f);
+                }
+                term.set_tile(term_x, term_y, gl, color, 0, textmode ? root_font : root_sprite_font);
             }
-            else
+            if (cell.object.ordinal != 0)
+            {
+                ObjectInfo obj = cell.object.info;
+                AppearanceInfo look = obj.look.info;
+                bool textmode = is_textmode || look.sprite_index < 0;
+                char gl = textmode ? look.glyph : (char) look.sprite_index;
+                rl::Color color = textmode ? look.color : rl::WHITE;
+                if (!is_visible)
+                {
+                    color = color.grayscale().darken(0.4f);
+                }
+                term.set_tile(term_x, term_y, gl, color, textmode ? 0 : 1, textmode ? root_font : root_sprite_font);
+            }
+            if (is_visible && !cell.entities.is_empty())
             {
                 Entity first = cell.entities.first()!!;
-                term.set_tile(term_x, term_y, first.get_glyph(), first.get_color());
+
+                AppearanceInfo look = first.get_look().info;
+                bool textmode = is_textmode || look.sprite_index < 0;
+                char gl = textmode ? look.glyph : (char) look.sprite_index;
+                rl::Color color = textmode ? look.color : rl::WHITE;
+                term.set_tile(term_x, term_y, gl, color, textmode ? 0 : 1, textmode ? root_font : root_sprite_font);
+                first.on_render(term, {term_x, term_y});
             }
         }
     }
@@ -265,16 +393,14 @@ fn void Zone.render(&self, VirtualTerminal* term, ZoneRenderSettings settings)
 
 fn double get_diag_heuristic(IVec2 a, IVec2 b)
 {
-    int dx = math::abs(a[0] - b[0]);
-    int dy = math::abs(a[1] - b[1]);
-    return (double) (dx + dy) + (-0.58578643762) * math::min(dx, dy);
+    IVec2 dv = math::abs(a - b);
+    return dv.sum() + -0.58578643762 * dv.min_element();
 }
 
 fn double get_heuristic(IVec2 a, IVec2 b)
 {
-    int dx = math::abs(a[0] - b[0]);
-    int dy = math::abs(a[1] - b[1]);
-    return (double) (dx + dy);
+    IVec2 dv = math::abs(a - b);
+    return (double) dv.sum();
 }
 
 struct AStarStep
@@ -282,70 +408,110 @@ struct AStarStep
     IVec2 pos;
     IVec2 last;
     double cost;
+    double h_cost;
 }
 
-fn bool AStarStep.less(AStarStep* a, AStarStep b) => a.cost < b.cost;
+fn bool AStarStep.less(AStarStep* a, AStarStep b) => a.h_cost < b.h_cost;
 
 const IVec2[4] DIRECT_NEIGHBORS = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };
 const IVec2[4] DIAGONAL_NEIGHBORS = { {-1, -1}, {1, -1}, {-1, 1}, {1, 1} };
 
 <*
 @param [&in] results
-@require from[0] >= 0, from[0] < self.width: "From x out of bounds"
-@require from[1] >= 0, from[1] < self.height: "From y out of bounds"
-@require to[0] >= 0, to[0] < self.width: "To x out of bounds"
-@require to[1] >= 0, to[1] < self.height: "To y out of bounds"
 *>
 fn bool Zone.path(&self, IVec2 from, IVec2 to, List(<IVec2>)* results, bool diagonal_moves=true, bool reverse=false)
 {
+    if (from.x < 0 || from.x >= self.size.x || from.y < 0 || from.y >= self.size.y) return false;
+    if (to.x < 0 || to.x >= self.size.x || to.y < 0 || to.y >= self.size.y) return false;
     PriorityQueue(<AStarStep>) frontier;
     frontier.temp_init(16);
     HashMap(<IVec2, AStarStep>) came_from;
     came_from.temp_init(16);
 
-    frontier.push({from, from, 0});
-    came_from.set(from, {from, from, 0});
+    frontier.push({from, from, 0, 0});
+    came_from.set(from, {from, from, 0, 0});
 
-    //io::printfn("Pathfinding from [%d %d] to [%d %d]", ...from, ...to);
+    const DEBUG_PATHFINDING = false;
+
+    if (DEBUG_PATHFINDING) io::printfn("Pathfinding from [%d %d] to [%d %d]", ...from, ...to);
 
     while (!frontier.is_empty())
     {
         AStarStep current = frontier.pop()!!;
+        if (DEBUG_PATHFINDING) io::printfn("Popped [%d %d] with cost %.1f", ...current.pos, current.cost);
         if (current.pos == to) break;
         
         foreach (n: DIRECT_NEIGHBORS)
         {
+            AStarStep save_current = current;
             IVec2 next = current.pos + n;
-            if (next[0] < 0 || next[0] >= self.width || next[1] < 0 || next[1] >= self.height) continue;
-            ZoneCell* cell = self.get_cell(...next);
-            if (!cell.terrain.passable) continue;
+            if (DEBUG_PATHFINDING) io::printfn("  Checking [%d %d] -> [%d %d]", ...current.pos, ...next);
+            if (next[0] < 0 || next[0] >= self.size.x || next[1] < 0 || next[1] >= self.size.y) continue;
+            ZoneCell*! cell = self.get_cell(...next);
+            if (catch cell)
+            {
+                if (DEBUG_PATHFINDING) io::printfn("    Skipped [%d %d] because it's out of bounds", ...next);
+                current = save_current;
+                continue;
+            }
+            if (!cell.is_passable() && next != to)
+            {
+                if (DEBUG_PATHFINDING) io::printfn("    Skipped [%d %d] because it's impassable", ...next);
+                current = save_current;
+                continue;
+            }
             
             double new_cost = current.cost + 1;
             double h_cost = new_cost + (diagonal_moves ? get_diag_heuristic(next, to) : get_heuristic(next, to));
             AStarStep! existing = came_from.get(next);
-            if (try existing && existing.cost <= h_cost) continue;
-            AStarStep next_step = {next, current.pos, h_cost};
-            //io::printfn("Adding [%d %d] to frontier pathed from [%d %d] with cost %.1f", ...next, ...current.pos, next_step.cost);
+            if (try existing && existing.cost <= new_cost)
+            {
+                if (DEBUG_PATHFINDING) io::printfn("    Skipped [%d %d] because it's already pathed with cost %.1f (new_cost was %.1f)", ...next, existing.cost, new_cost);
+                current = save_current;
+                continue;
+            }
+            AStarStep next_step = {next, current.pos, new_cost, h_cost};
+            if (DEBUG_PATHFINDING) io::printfn("    Adding [%d %d] to frontier pathed from [%d %d] with cost %.1f", ...next, ...current.pos, next_step.cost);
             frontier.push(next_step);
             came_from.set(next, next_step);
+            current = save_current;
         }
         if (diagonal_moves)
         {
             foreach (n: DIAGONAL_NEIGHBORS)
             {
+                AStarStep save_current = current;
                 IVec2 next = current.pos + n;
-                if (next[0] < 0 || next[0] >= self.width || next[1] < 0 || next[1] >= self.height) continue;
-                ZoneCell* cell = self.get_cell(...next);
-                if (!cell.terrain.passable) continue;
+                if (DEBUG_PATHFINDING) io::printfn("  Checking [%d %d] -> [%d %d]", ...current.pos, ...next);
+                if (next[0] < 0 || next[0] >= self.size.x || next[1] < 0 || next[1] >= self.size.y) continue;
+                ZoneCell*! cell = self.get_cell(...next);
+                if (catch cell)
+                {
+                    if (DEBUG_PATHFINDING) io::printfn("    Skipped [%d %d] because it's out of bounds", ...next);
+                    current = save_current;
+                    continue;
+                }
+                if (!cell.is_passable() && next != to)
+                {
+                    if (DEBUG_PATHFINDING) io::printfn("    Skipped [%d %d] because it's impassable", ...next);
+                    current = save_current;
+                    continue;
+                }
                 
                 double new_cost = current.cost + 1.414;
                 double h_cost = new_cost + get_diag_heuristic(next, to);
                 AStarStep! existing = came_from.get(next);
-                if (try existing && existing.cost <= h_cost) continue;
-                AStarStep next_step = {next, current.pos, h_cost};
-                //io::printfn("Adding [%d %d] to frontier pathed from [%d %d] with cost %.1f", ...next, ...current.pos, next_step.cost);
+                if (try existing && existing.cost <= new_cost)
+                {
+                    if (DEBUG_PATHFINDING) io::printfn("    Skipped [%d %d] because it's already pathed with cost %.1f (new_cost was %.1f)", ...next, existing.cost, new_cost);
+                    current = save_current;
+                    continue;
+                }
+                AStarStep next_step = {next, current.pos, new_cost, h_cost};
+                if (DEBUG_PATHFINDING) io::printfn("    Adding [%d %d] to frontier pathed from [%d %d] with cost %.1f", ...next, ...current.pos, next_step.cost);
                 frontier.push(next_step);
                 came_from.set(next, next_step);
+                current = save_current;
             }
         }
     }
@@ -353,48 +519,21 @@ fn bool Zone.path(&self, IVec2 from, IVec2 to, List(<IVec2>)* results, bool diag
     if (!came_from.has_key(to)) return false;
 
     IVec2 step_back = to;
-
+    if (DEBUG_PATHFINDING) io::printfn("Final path from [%d %d] to [%d %d]", ...from, ...to);
     results.clear();
     while (step_back != from)
     {
         results.push(step_back);
         AStarStep! step = came_from.get(step_back);
         if (catch step) unreachable("Pathfinding error");
+        if (DEBUG_PATHFINDING) io::printfn("    [%d %d] from [%d %d]", ...step_back, ...step.last);
         step_back = step.last;
     }
     if (!reverse) results.reverse();
 
-    //io::printfn("Done pathfinding, found %d steps", results.len());
-    //io::printn(results);
+    if (DEBUG_PATHFINDING) io::printfn("Done pathfinding, found %d steps", results.len());
+    if (DEBUG_PATHFINDING) io::printn(results);
     return true;
-}
-
-def ZoneGenerator = fn void(void* data, Zone* zone);
-struct ZoneDescription
-{
-    String name;
-    int width;
-    int height;
-
-    ZoneGenerator generator;
-    void* generator_data;
-}
-
-<*
-@require width > 0: "Zone width must be greater than 0"
-@require height > 0: "Zone height must be greater than 0"
-*>
-fn void ZoneDescription.new_init(&self, String name, int width, int height)
-{
-    self.name = name;
-    self.width = width;
-    self.height = height;
-}
-
-fn void load_zone(ZoneDescription desc)
-{
-    zone = mem::new(Zone);
-    zone.new_init(desc);
 }
 
 def LineCallback = fn bool(void* data, IVec2 next);

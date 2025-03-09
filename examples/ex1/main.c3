@@ -23,12 +23,49 @@ fn RLSettings Ex1.settings(&self) @dynamic
 // Render is called every frame.
 fn void Ex1.render(&self) @dynamic
 {
-    c3rl::terminal.clear(colors::BLACK);
-    c3rl::terminal.write(1, 1, "Hello World", colors::WHITE);
+    c3rl::ui_term.clear(colors::BLACK);
+    c3rl::ui_term.write(1, 1, "Hello World", colors::WHITE);
 }
+
+fn Entity Ex1.get_player(&self) @dynamic => null;
 
 fn void main()
 {
     Ex1 game;
     c3rl::launch(&game);
+}
+
+
+module c3rl::game;
+import c3rl;
+import raylib5::rl;
+
+// Appearance defines the look of something on the screen
+enum Appearance : (AppearanceInfo info)
+{
+    EMPTY = { ' ', colors::BLACK, -1 },
+    PLAYER = { '@', colors::WHITE, -1 },
+    WALL = { '#', colors::LIGHT_GREY, -1 },
+    FLOOR = { '.', colors::DARK_GREY, -1 },
+}
+
+// Terrain defines static parts of the map that don't have logic
+enum Terrain : (TerrainInfo info)
+{
+    EMPTY = { "", 0, Appearance.EMPTY, "" },
+}
+
+// Object defines static parts of the map that may have additional interaction logic
+enum Object : (ObjectInfo info)
+{
+    EMPTY = { "", 0, Appearance.EMPTY, "", null },
+}
+
+// Inputs are abstract actions and are assicated to default input keys
+enum Input : inline int (rl::KeyboardKey primary, rl::KeyboardKey secondary)
+{
+    MOVE_UP = { rl::KEY_UP, rl::KEY_KP_8 },
+    MOVE_DOWN = { rl::KEY_DOWN, rl::KEY_KP_2 },
+    MOVE_LEFT = { rl::KEY_LEFT, rl::KEY_KP_4 },
+    MOVE_RIGHT = { rl::KEY_RIGHT, rl::KEY_KP_6 },
 }

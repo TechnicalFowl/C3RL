@@ -7,9 +7,20 @@ def IVec3 = int[<3>];
 def IVec4 = int[<4>];
 
 fn uint IVec2.hash(self) => ((uint) self.x) * 2654435761u + ((uint) self.y);
+fn uint IVec3.hash(self) => (((uint) self.x) * 2654435761u + ((uint) self.y)) * 2654435761u + ((uint) self.z);
+fn uint IVec4.hash(self) => ((((uint) self.x) * 2654435761u + ((uint) self.y)) * 2654435761u + ((uint) self.z)) * 2654435761u + ((uint) self.y);
 
-fn IVec2 IVec2.sign(&self) => { math::sign(self.x), math::sign(self.y) };
+fn IVec2 IVec2.sign(self) => { math::sign(self.x), math::sign(self.y) };
 fn int IVec2.distance(self, IVec2 other) => math::abs(self - other).sum();
+fn int IVec2.dot(self, IVec2 other) => self.x * other.x + self.y * other.y;
+fn double IVec2.length(self) => math::sqrt(self.dot(self));
+fn int IVec2.length_sq(self) => self.dot(self);
+fn double IVec2.fdistance(self, IVec2 other) => (self - other).length();
+fn int IVec2.min_element(self) => math::min(self.x, self.y);
+fn int IVec2.max_element(self) => math::max(self.x, self.y);
+fn IVec2 IVec2.min(self, IVec2 other) => { math::min(self.x, other.x), math::min(self.y, other.y) };
+fn IVec2 IVec2.max(self, IVec2 other) => { math::max(self.x, other.x), math::max(self.y, other.y) };
+fn IVec2 IVec2.clamp(self, IVec2 min, IVec2 max) => self.max(min).min(max);
 
 struct BitBoard
 {
