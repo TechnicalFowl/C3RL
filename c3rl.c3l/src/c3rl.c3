@@ -115,6 +115,9 @@ fn void launch(RLGame game)
         current_zone.new_init(settings.initial_zone);
     }
 
+    
+    @call_event(PostLoadEvent, on_post_load, game);
+
     rl::traceLog(rl::TraceLogLevel.INFO, "C3RL: Starting game loop...");
 
     gui::gui_data.new_init();
